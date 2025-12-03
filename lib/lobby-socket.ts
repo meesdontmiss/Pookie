@@ -325,6 +325,28 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
           setState(prev => ({ ...prev, players: mapped }))
         } catch {}
       })
+      // Generic CC event carrying the current player list
+      s.on('updatePlayerList', (playersArr: any[]) => {
+        try {
+          const rows = Array.isArray(playersArr) ? playersArr : []
+          const mapped: UIRoomPlayer[] = rows.map((p: any) => {
+            // server/index.js uses socket.id + optional solanaPublicKey/username
+            const raw = String(p.solanaPublicKey || p.id || '').toLowerCase()
+            const id = raw || (typeof p.playerId === 'string' ? p.playerId.toLowerCase() : '')
+            const short = id ? `${id.slice(0, 4)}...${id.slice(-4)}` : ''
+            const uname = (p.username && String(p.username).trim()) || (id ? id.slice(0,8)+'...' : 'Player')
+            return {
+              id,
+              username: uname,
+              walletShort: short,
+              wager: 0,
+              wagerConfirmed: Boolean(p.isReady), // best-effort
+              ready: Boolean(p.isReady),
+            }
+          })
+          setState(prev => ({ ...prev, players: mapped }))
+        } catch {}
+      })
       s.on('match_starting', (data: any) => {
         try {
           const seconds = Number(data?.countdown)
