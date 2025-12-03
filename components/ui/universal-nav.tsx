@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 // import { MusicPlayer } from '../audio/music-player'; // Temporarily commented out due to path issues
-import { Twitter, Home, Copy, Check } from 'lucide-react' // Assuming Twitter icon is used directly
+import { Twitter, Home, Copy, Check, FileText } from 'lucide-react' // Assuming Twitter icon is used directly
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui' // Temporarily comment out
 // Removed other lucide-react icons if they were only for MusicPlayer or NetworkStatus
 import { useEffect, useState } from 'react' // Import useEffect and useState
@@ -79,8 +79,14 @@ export default function UniversalNav() {
           </Link>
         </div>
 
-        {/* Right Section: Wallet and Twitter */}
-        <div className="flex items-center justify-end w-[200px] space-x-3">
+        {/* Right Section: Wallet, Receipts, Twitter */}
+        <div className="flex items-center justify-end w-[220px] space-x-3">
+          <Link href="/account/history" legacyBehavior>
+            <a className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white/10 border border-white/15 hover:bg-white/20 hover:border-cyan-400/40 transition-colors duration-200">
+              <FileText size={14} />
+              <span className="hidden sm:inline">Receipts</span>
+            </a>
+          </Link>
           {hasMounted ? (
             <WalletMultiButton />
           ) : (
