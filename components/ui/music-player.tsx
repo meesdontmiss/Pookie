@@ -16,19 +16,15 @@ export default function MusicPlayer() {
   useEffect(() => {
     const loadPlaylist = async () => {
       try {
-        // In production, you'd fetch this from an API or manifest
-        // For now, we'll manually check for numbered files
-        const tracks: string[] = []
-        for (let i = 1; i <= 20; i++) {
-          // Try to load tracks numbered 1-20
-          const response = await fetch(`/music/${i}_`, { method: 'HEAD' })
-          if (response.ok) {
-            tracks.push(`/music/${i}_`)
-          }
-        }
+        const res = await fetch('/api/music', { cache: 'no-store' })
+        if (!res.ok) throw new Error('Failed to load playlist')
+        const data = await res.json()
+        const tracks: string[] = Array.isArray(data?.tracks)
+          ? data.tracks.map((t: any) => String(t?.url)).filter(Boolean)
+          : []
         setPlaylist(tracks)
       } catch (error) {
-        console.log('No tracks found yet')
+        setPlaylist([])
       }
     }
     loadPlaylist()
