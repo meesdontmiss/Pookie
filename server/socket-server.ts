@@ -20,6 +20,21 @@ import { getSupabaseAdmin } from '../lib/supabase-admin'
 
 type LobbyId = string
 type Wallet = string
+type GamePhase = 'WAITING' | 'STARTING_COUNTDOWN' | 'ACTIVE' | 'ROUND_OVER' | 'GAME_OVER'
+
+interface GameStatusUpdatePayloadPayload {
+  gameState: GamePhase
+  players?: Array<{
+    id: string
+    username: string
+    status: 'In' | 'Out'
+    position?: { x: number; y: number; z: number }
+    quaternion?: { x: number; y: number; z: number; w: number }
+  }>
+  winnerInfo?: { id: string; username: string; score?: number }
+  countdown?: number | null
+  message?: string
+}
 
 interface PlayerState {
   socketId: string
@@ -212,6 +227,40 @@ async function resetLobbyPlayers() {
 
 resetLobbyPlayers().catch((error) => console.error('[supabase] Reset players error', error))
 
+async function recordMatchStart(matchId: MatchId, lobbyId: LobbyId, gameMode: string, seed: number, roster: Array<{ wallet: string; username: string; isAi?: boolean }>) {
+  try {
+    await supabase
+      .from('match_state')
+      .upsert({
+        id: matchId,
+        lobby_id: lobbyId,
+        game_mode: gameMode,
+        seed,
+        roster,
+        status: 'active',
+        started_at: new Date().toISOString(),
+      })
+  } catch (error) {
+    console.error('[supabase] Failed to record match start', { matchId, lobbyId, error })
+  }
+}
+
+async function recordMatchResult(matchId: MatchId, status: 'completed' | 'cancelled', winnerWallet?: string) {
+  try {
+    await supabase
+      .from('match_state')
+      .update({
+        status,
+        winner_wallet: winnerWallet ?? null,
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', matchId)
+  } catch (error) {
+    console.error('[supabase] Failed to record match result', { matchId, status, winnerWallet, error })
+  }
+}
+
+
 // Build in-memory lobbies from hardcoded list
 const lobbies = new Map<LobbyId, LobbyState>()
 for (const l of HARDCODED_LOBBIES) {
@@ -357,6 +406,8 @@ function startMatch(lobby: LobbyState) {
   }
   activeMatches.set(matchId, snapshot)
   lastMatchByLobby.set(lobby.id, matchId)
+  const gameMode = HARDCODED_LOBBIES.find((h) => h.id === lobby.id)?.gameMode ?? 'SMALL_SUMO'
+  void recordMatchStart(matchId, lobby.id, gameMode, seed, snapshot.roster ?? [])
 
   const payload: GameStartPacket = {
     matchId,
@@ -369,7 +420,7 @@ function startMatch(lobby: LobbyState) {
       isAi: Boolean(p.isAi),
     })),
     wagerAmount: lobby.wager,
-    gameMode: HARDCODED_LOBBIES.find((h) => h.id === lobby.id)?.gameMode ?? 'SMALL_SUMO',
+    gameMode,
     serverTimestamp: Date.now(),
   }
   const message: ServerToClient = { type: 'match_start', payload }
@@ -584,6 +635,7 @@ io.on('connection', (socket) => {
             }
 
             console.log(`🏁 Payout complete for match ${matchId} → winner ${winner}`)
+            await recordMatchResult(matchId, 'completed', winner)
             activeMatches.delete(matchId)
             // No broadcast necessary here
           } catch (e: any) {
@@ -621,6 +673,7 @@ io.on('connection', (socket) => {
               })
             }
             console.log(`🏁 Auto payout complete for match ${matchId} → winner ${winner}`)
+            await recordMatchResult(matchId, 'completed', winner)
             activeMatches.delete(matchId)
           } catch (e) {
             console.error('❌ Auto payout failed:', e)
@@ -728,6 +781,27 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 4001
 app.get('/health', (_req, res) => res.json({ ok: true }))
 server.listen(PORT, () => console.log(`[sumo-socket] listening on ${PORT}`))
+
+const MATCH_TICK_INTERVAL_MS = 1000
+setInterval(() => {
+  for (const [matchId, match] of activeMatches.entries()) {
+    const elapsedSeconds = Math.floor((Date.now() - (match.startedAt || Date.now())) / 1000)
+    const roster = match.roster || []
+    const payload: GameStatusUpdatePayloadPayload = {
+      gameState: 'ACTIVE',
+      countdown: null,
+      message: `Elapsed ${elapsedSeconds}s`,
+      players: roster.map((p) => ({
+        id: p.wallet,
+        username: p.username,
+        status: 'In',
+        position: { x: 0, y: 0, z: 0 },
+        quaternion: { x: 0, y: 0, z: 0, w: 1 },
+      })),
+    }
+    io.to(matchId).emit('gameStatusUpdate', payload)
+  }
+}, MATCH_TICK_INTERVAL_MS)
 
 
 
