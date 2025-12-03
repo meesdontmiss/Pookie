@@ -38,22 +38,7 @@ const nextConfig = {
       'superpookieball': './components/superpookieball-game.tsx'
     };
     
-    // Attempt to fix the "not a React Component" issue by forcing proper ESM exports
-    config.module.rules.push({
-      test: /\.(js|jsx|ts|tsx)$/,
-      include: [/components\/plug-penguin\/minigames\/superpookieball/],
-      use: [
-        {
-          loader: 'babel-loader',
-          options: {
-            babelrc: false,
-            configFile: false,
-            presets: ['next/babel'],
-            plugins: ['@babel/plugin-transform-react-jsx'],
-          },
-        },
-      ],
-    });
+    // Remove legacy babel-loader rule; Next.js uses SWC by default
 
     // Fixed optimization to avoid the conflict between usedExports and cacheUnaffected
     config.optimization = {
