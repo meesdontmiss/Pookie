@@ -164,6 +164,9 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
         if (effectiveWallet && effectiveUsername) {
           const join: ClientToServer = { type: 'join_lobby', lobbyId, username: effectiveUsername, wallet: String(effectiveWallet) }
           s.emit('message', join)
+          // Cock Combat compatibility: also join room and request snapshot via classic events
+          try { s.emit('join_lobby_room', lobbyId) } catch {}
+          try { s.emit('get_lobby_state', lobbyId) } catch {}
         }
         
         // Request initial state
@@ -271,6 +274,70 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
         }
       })
 
+      // Cock Combat compatibility: roster and status events → map into our UI state
+      s.on('roster_full', (payload: any) => {
+        try {
+          if (!payload || (payload.lobbyId && payload.lobbyId !== lobbyId)) return
+          const rows = Array.isArray(payload.players) ? payload.players : []
+          const mapped: UIRoomPlayer[] = rows.map((p: any) => {
+            const id = String(p.playerId || '').toLowerCase()
+            const short = id ? `${id.slice(0, 4)}...${id.slice(-4)}` : ''
+            return {
+              id,
+              username: p.username || (id ? id.slice(0, 8) + '...' : 'Player'),
+              walletShort: short,
+              wager: 0,
+              wagerConfirmed: Boolean(p.hasWagered || p.isReady),
+              ready: Boolean(p.isReady),
+            }
+          })
+          setState(prev => ({ ...prev, players: mapped }))
+        } catch {}
+      })
+      s.on('player_ready_status', (data: any) => {
+        try {
+          const eventLobbyId = String((data && (data as any).lobbyId) || '')
+          if (eventLobbyId && eventLobbyId !== lobbyId) return
+          const pid = String(data?.playerId || '').toLowerCase()
+          const isReady = Boolean(data?.isReady)
+          setState(prev => ({
+            ...prev,
+            players: prev.players.map(p => p.id === pid ? { ...p, ready: isReady } : p),
+          }))
+        } catch {}
+      })
+      s.on('lobby_synced', (payload: any) => {
+        try {
+          if (!payload || payload.id !== lobbyId) return
+          const rows = Array.isArray(payload.players) ? payload.players : []
+          const mapped: UIRoomPlayer[] = rows.map((p: any) => {
+            const id = String(p.playerId || '').toLowerCase()
+            const short = id ? `${id.slice(0, 4)}...${id.slice(-4)}` : ''
+            return {
+              id,
+              username: (p.username && p.username.trim()) || (id ? id.slice(0, 8) + '...' : 'Player'),
+              walletShort: short,
+              wager: 0,
+              wagerConfirmed: Boolean(p.hasWagered || p.isReady),
+              ready: Boolean(p.isReady),
+            }
+          })
+          setState(prev => ({ ...prev, players: mapped }))
+        } catch {}
+      })
+      s.on('match_starting', (data: any) => {
+        try {
+          const seconds = Number(data?.countdown)
+          if (!Number.isNaN(seconds)) {
+            setState(prev => ({ ...prev, countdown: seconds, status: 'countdown' }))
+          }
+        } catch {}
+      })
+      s.on('match_started', () => {
+        try {
+          setState(prev => ({ ...prev, countdown: null, status: 'open' }))
+        } catch {}
+      })
       // ACK events
       s.on('identity_registered', () => {
         console.log('✅ Identity registered')
