@@ -82,6 +82,7 @@ const socketToMatch = new Map<string, string>() // map socket.id -> matchId
 const socketToLobby = new Map<string, LobbyId>()
 
 const supabase = getSupabaseAdmin()
+const MAX_PAYMENT_ATTEMPTS = 5
 
 async function ensureSeedLobbies() {
   try {
@@ -260,6 +261,140 @@ async function recordMatchResult(matchId: MatchId, status: 'completed' | 'cancel
   }
 }
 
+async function insertTransactionRecord(wallet: string | null, type: string, amount: number, relatedId: string | null, description: string | null, txSignature: string | null) {
+  try {
+    await supabase
+      .from('transactions')
+      .insert({
+        wallet_address: wallet,
+        transaction_type: type,
+        amount,
+        related_entity_id: relatedId,
+        description,
+        tx_signature: txSignature,
+      })
+  } catch (error) {
+    console.error('[supabase] Failed to insert transaction', { wallet, type, amount, relatedId, error })
+  }
+}
+
+async function updateWagerEventStatus(txSignature: string, status: string) {
+  try {
+    await supabase
+      .from('wager_events')
+      .update({ status })
+      .eq('tx_signature', txSignature)
+  } catch (error) {
+    console.error('[supabase] Failed to update wager event status', { txSignature, status, error })
+  }
+}
+
+async function enqueuePaymentJob(jobType: 'payout' | 'refund', payload: Record<string, any>) {
+  const { data, error } = await supabase
+    .from('payment_jobs')
+    .insert({ job_type: jobType, payload })
+    .select('id')
+    .single()
+  if (error) throw error
+  return data.id as string
+}
+
+async function claimPendingJobs(limit = 5) {
+  const { data, error } = await supabase
+    .from('payment_jobs')
+    .select('*')
+    .in('status', ['pending', 'failed'])
+    .lt('attempts', MAX_PAYMENT_ATTEMPTS)
+    .order('created_at', { ascending: true })
+    .limit(limit)
+  if (error) {
+    console.error('[supabase] Failed to fetch payment jobs', error)
+    return []
+  }
+  return data ?? []
+}
+
+async function markJobProcessing(id: string, currentStatus: string) {
+  const { data, error } = await supabase
+    .from('payment_jobs')
+    .update({ status: 'processing' })
+    .eq('id', id)
+    .eq('status', currentStatus)
+    .select('id')
+  if (error) {
+    console.error('[supabase] Failed to mark job processing', { id, error })
+    return false
+  }
+  return (data ?? []).length > 0
+}
+
+async function finalizeJob(id: string, status: 'completed' | 'failed', attempts: number, lastError?: string | null, extraPayload?: Record<string, any>) {
+  const update: Record<string, any> = {
+    status,
+    attempts,
+    last_error: lastError ?? null,
+  }
+  if (status === 'completed') {
+    update.processed_at = new Date().toISOString()
+  }
+  if (extraPayload) {
+    update.payload = extraPayload
+  }
+  const { error } = await supabase
+    .from('payment_jobs')
+    .update(update)
+    .eq('id', id)
+  if (error) {
+    console.error('[supabase] Failed to finalize job', { id, status, error })
+  }
+}
+
+async function processPaymentJobsOnce() {
+  const jobs = await claimPendingJobs(5)
+  for (const job of jobs) {
+    const claimed = await markJobProcessing(job.id, job.status)
+    if (!claimed) continue
+    const payload = job.payload || {}
+    let attempts = (job.attempts ?? 0) + 1
+    try {
+      if (job.job_type === 'payout') {
+        const { escrowPublicKey, winnerPublicKey, totalPotSol, adminWalletPublicKey, houseCutPercentage, matchId } = payload
+        const result = await payoutFromEscrow({
+          escrowPublicKey,
+          winnerPublicKey,
+          totalPotSol,
+          adminWalletPublicKey,
+          houseCutPercentage,
+        })
+        await insertTransactionRecord(winnerPublicKey, 'win', result.winnerAmountSol, matchId ?? null, 'Match payout', result.signature)
+        await insertTransactionRecord(adminWalletPublicKey, 'house_cut', result.houseAmountSol, matchId ?? null, 'House cut', result.signature)
+        if (matchId) await recordMatchResult(matchId, 'completed', winnerPublicKey)
+        await finalizeJob(job.id, 'completed', attempts, null, { ...payload, signature: result.signature })
+      } else if (job.job_type === 'refund') {
+        const { escrowPublicKey, playerPublicKey, amountSol, txSignatureKey, description } = payload
+        const result = await refundFromEscrow({
+          escrowPublicKey,
+          playerPublicKey,
+          amountSol,
+        })
+        await insertTransactionRecord(playerPublicKey, 'refund', amountSol, null, description ?? 'Lobby refund', result.signature)
+        if (txSignatureKey) await updateWagerEventStatus(txSignatureKey, 'refunded')
+        await finalizeJob(job.id, 'completed', attempts, null, { ...payload, signature: result.signature })
+      } else {
+        throw new Error(`Unknown job type: ${job.job_type}`)
+      }
+    } catch (error: any) {
+      console.error('[payment-job] Failed', { id: job.id, error })
+      const lastError = error?.message || String(error)
+      await finalizeJob(job.id, attempts >= MAX_PAYMENT_ATTEMPTS ? 'failed' : 'pending', attempts, lastError)
+    }
+  }
+}
+
+setInterval(() => {
+  processPaymentJobsOnce().catch((error) => console.error('[payment-jobs] loop error', error))
+}, 3000)
+
 
 // Build in-memory lobbies from hardcoded list
 const lobbies = new Map<LobbyId, LobbyState>()
@@ -323,19 +458,14 @@ function tryStartCountdown(lobby: LobbyState) {
           if (lobby.wager > 0 && p.wagerLocked && p.escrowAddress && p.wagerAmountSol) {
             const sigKey = p.txSignature || `${wallet}-${lobby.id}`
             if (sigKey && !processedRefunds.has(sigKey)) {
-              (async () => {
-                try {
-                  console.log(`↩️ Refunding (kick) ${p.wagerAmountSol} SOL to ${wallet} from ${p.escrowAddress}`)
-                  await refundFromEscrow({
-                    escrowPublicKey: p.escrowAddress!,
-                    playerPublicKey: wallet,
-                    amountSol: p.wagerAmountSol!,
-                  })
-                  processedRefunds.add(sigKey)
-                } catch (e) {
-                  console.error('❌ Refund failed on kick:', e)
-                }
-              })()
+              enqueuePaymentJob('refund', {
+                escrowPublicKey: p.escrowAddress,
+                playerPublicKey: wallet,
+                amountSol: p.wagerAmountSol,
+                txSignatureKey: sigKey,
+                description: 'Auto-refund: countdown kick',
+              }).catch((e) => console.error('❌ enqueue refund failed', e))
+              processedRefunds.add(sigKey)
             }
           }
           lobby.players.delete(wallet)
@@ -608,77 +738,64 @@ io.on('connection', (socket) => {
           return
         }
 
-        (async () => {
-          try {
-            const match = activeMatches.get(matchId)
-            if (!match) throw new Error('Match not found')
-
-            // Group contributions by escrow
-            const byEscrow = new Map<string, number>()
-            for (const p of match.players) {
-              byEscrow.set(p.escrowAddress, (byEscrow.get(p.escrowAddress) || 0) + p.amountSol)
-            }
-
-            const housePct = Number(process.env.HOUSE_CUT_PERCENTAGE ?? '0.04')
-            const admin = process.env.NEXT_PUBLIC_ADMIN_WALLET || process.env.ADMIN_WALLET
-            if (!admin) throw new Error('Admin wallet not configured')
-
-            // Execute payouts per escrow wallet
-            for (const [escrow, pot] of byEscrow.entries()) {
-              await payoutFromEscrow({
-                escrowPublicKey: escrow,
-                winnerPublicKey: winner,
-                totalPotSol: pot,
-                adminWalletPublicKey: admin,
-                houseCutPercentage: housePct,
-              })
-            }
-
-            console.log(`🏁 Payout complete for match ${matchId} → winner ${winner}`)
-            await recordMatchResult(matchId, 'completed', winner)
-            activeMatches.delete(matchId)
-            // No broadcast necessary here
-          } catch (e: any) {
-            console.error('❌ Admin payout failed:', e?.message || e)
-            socket.emit('message', { type: 'error', message: 'Payout failed', code: 'ERR_PAYOUT' } as ServerToClient)
+        try {
+          const match = activeMatches.get(matchId)
+          if (!match) {
+            socket.emit('message', { type: 'error', message: 'Match not found', code: 'ERR_NOT_FOUND' } as ServerToClient)
+            return
           }
-        })()
+          const byEscrow = new Map<string, number>()
+          for (const p of match.players) {
+            byEscrow.set(p.escrowAddress, (byEscrow.get(p.escrowAddress) || 0) + p.amountSol)
+          }
+          const housePct = Number(process.env.HOUSE_CUT_PERCENTAGE ?? '0.04')
+          const admin = process.env.NEXT_PUBLIC_ADMIN_WALLET || process.env.ADMIN_WALLET
+          if (!admin) throw new Error('Admin wallet not configured')
+          for (const [escrow, pot] of byEscrow.entries()) {
+            enqueuePaymentJob('payout', {
+              escrowPublicKey: escrow,
+              winnerPublicKey: winner,
+              totalPotSol: pot,
+              adminWalletPublicKey: admin,
+              houseCutPercentage: housePct,
+              matchId,
+            }).catch((e) => console.error('❌ enqueue payout failed', e))
+          }
+          activeMatches.delete(matchId)
+        } catch (e: any) {
+          console.error('❌ Admin payout enqueue failed:', e?.message || e)
+          socket.emit('message', { type: 'error', message: 'Payout enqueue failed', code: 'ERR_PAYOUT' } as ServerToClient)
+        }
       }
       if (data.type === 'match_result') {
         // Game client reports winner at end of match
         const matchId = (data as any).matchId as string | undefined
         const winner = (data as any).winnerWallet as string | undefined
         if (!matchId || !winner) return
-        ;(async () => {
-          try {
-            const match = activeMatches.get(matchId)
-            if (!match) return
-
-            const byEscrow = new Map<string, number>()
-            for (const p of match.players) {
-              byEscrow.set(p.escrowAddress, (byEscrow.get(p.escrowAddress) || 0) + p.amountSol)
-            }
-
-            const housePct = Number(process.env.HOUSE_CUT_PERCENTAGE ?? '0.04')
-            const admin = process.env.NEXT_PUBLIC_ADMIN_WALLET || process.env.ADMIN_WALLET
-            if (!admin) throw new Error('Admin wallet not configured')
-
-            for (const [escrow, pot] of byEscrow.entries()) {
-              await payoutFromEscrow({
-                escrowPublicKey: escrow,
-                winnerPublicKey: winner,
-                totalPotSol: pot,
-                adminWalletPublicKey: admin,
-                houseCutPercentage: housePct,
-              })
-            }
-            console.log(`🏁 Auto payout complete for match ${matchId} → winner ${winner}`)
-            await recordMatchResult(matchId, 'completed', winner)
-            activeMatches.delete(matchId)
-          } catch (e) {
-            console.error('❌ Auto payout failed:', e)
+        try {
+          const match = activeMatches.get(matchId)
+          if (!match) return
+          const byEscrow = new Map<string, number>()
+          for (const p of match.players) {
+            byEscrow.set(p.escrowAddress, (byEscrow.get(p.escrowAddress) || 0) + p.amountSol)
           }
-        })()
+          const housePct = Number(process.env.HOUSE_CUT_PERCENTAGE ?? '0.04')
+          const admin = process.env.NEXT_PUBLIC_ADMIN_WALLET || process.env.ADMIN_WALLET
+          if (!admin) throw new Error('Admin wallet not configured')
+          for (const [escrow, pot] of byEscrow.entries()) {
+            enqueuePaymentJob('payout', {
+              escrowPublicKey: escrow,
+              winnerPublicKey: winner,
+              totalPotSol: pot,
+              adminWalletPublicKey: admin,
+              houseCutPercentage: housePct,
+              matchId,
+            }).catch((e) => console.error('❌ enqueue payout failed', e))
+          }
+          activeMatches.delete(matchId)
+        } catch (e) {
+          console.error('❌ Auto payout enqueue failed:', e)
+        }
       }
       if (data.type === 'leave_lobby') {
         const lobby = lobbies.get(data.lobbyId); if (!lobby) return
@@ -688,19 +805,14 @@ io.on('connection', (socket) => {
             const shouldRefund = lobby.wager > 0 && p.wagerLocked && !p.refunded && (lobby.countdown === null)
             const sigKey = p.txSignature || `${wallet}-${lobby.id}`
             if (shouldRefund && sigKey && !processedRefunds.has(sigKey) && p.escrowAddress && p.wagerAmountSol) {
-              (async () => {
-                try {
-                  console.log(`↩️ Refunding ${p.wagerAmountSol} SOL to ${wallet} from ${p.escrowAddress}`)
-                  await refundFromEscrow({
-                    escrowPublicKey: p.escrowAddress,
-                    playerPublicKey: wallet,
-                    amountSol: p.wagerAmountSol,
-                  })
-                  processedRefunds.add(sigKey)
-                } catch (e) {
-                  console.error('❌ Refund failed on leave:', e)
-                }
-              })()
+              enqueuePaymentJob('refund', {
+                escrowPublicKey: p.escrowAddress,
+                playerPublicKey: wallet,
+                amountSol: p.wagerAmountSol,
+                txSignatureKey: sigKey,
+                description: 'Auto-refund: player left lobby',
+              }).catch((e) => console.error('❌ enqueue refund failed', e))
+              processedRefunds.add(sigKey)
             }
             lobby.players.delete(wallet)
             socketToLobby.delete(socket.id)
