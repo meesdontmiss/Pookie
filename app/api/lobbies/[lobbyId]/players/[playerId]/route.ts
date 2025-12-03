@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 type RouteContext = {
   params: {
@@ -9,6 +9,7 @@ type RouteContext = {
 };
 
 async function syncLobbyPlayerCount(lobbyId: string) {
+  const supabaseAdmin = getSupabaseAdmin()
   const { count } = await supabaseAdmin
     .from("lobby_players")
     .select("id", { count: "exact", head: true })
@@ -49,6 +50,7 @@ export async function PATCH(
   };
 
   try {
+    const supabaseAdmin = getSupabaseAdmin()
     const { data, error } = await supabaseAdmin
       .from("lobby_players")
       .update({
@@ -93,6 +95,7 @@ export async function DELETE(
   }
 
   try {
+    const supabaseAdmin = getSupabaseAdmin()
     const { error } = await supabaseAdmin
       .from("lobby_players")
       .delete()

@@ -34,7 +34,7 @@
   width: clamp(240px, 38vw, 450px);
   height: auto;
   filter: drop-shadow(0 8px 24px rgba(0, 200, 255, 0.55));
-  transform: translateY(-10px);
+  transform: translateY(8px);
 }
 
 .taglineImage {
@@ -44,12 +44,12 @@
   height: auto;
   filter: drop-shadow(0 6px 18px rgba(0, 200, 255, 0.45));
   /* Raise the tagline substantially; OK if it visually overlaps */
-  transform: translateY(calc(-1 * clamp(40px, 30vh, 520px) - 134px));
+  transform: translateY(calc(-1 * clamp(40px, 30vh, 520px) - 84px));
   will-change: transform;
 }
 
 .waddleGif {
-  width: clamp(180px, 20vw, 240px);
+  width: clamp(270px, 30vw, 360px);
   height: auto;
   position: fixed;
   top: 50%;

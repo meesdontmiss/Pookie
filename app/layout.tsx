@@ -32,8 +32,35 @@ const inter = Inter({ subsets: ['latin'] })
 
 // metadata can now be safely exported from this Server Component
 export const metadata: Metadata = {
-  title: 'Plug Penguin',
-  description: 'A Club Penguin-style virtual world for crypto enthusiasts',
+  title: 'Pookie The Peng',
+  description: 'Pookie Sumo Royale and Social Hub',
+  icons: {
+    icon: '/images/POOKIE BLANK WADDLE gif.gif',
+    shortcut: '/images/POOKIE BLANK WADDLE gif.gif',
+    apple: '/images/POOKIE BLANK WADDLE gif.gif',
+  },
+  openGraph: {
+    title: 'Pookie The Peng',
+    description: 'Jump into Pookie Sumo Royale and the Social Hub.',
+    url: 'https://www.pookiethepeng.com',
+    siteName: 'Pookie The Peng',
+    images: [
+      {
+        url: '/images/POOKIE THE PLASTIC PENGUIN.gif',
+        type: 'image/gif',
+        width: 1200,
+        height: 630,
+      },
+    ],
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Pookie The Peng',
+    description: 'Jump into Pookie Sumo Royale and the Social Hub.',
+    images: ['/images/POOKIE THE PLASTIC PENGUIN.gif'],
+  },
 }
 
 export default function RootLayout({
@@ -45,6 +72,14 @@ export default function RootLayout({
     <html lang="en" className="dark" suppressHydrationWarning>
       <head>
         <link rel="preload" href="/cursors/cursor.svg" as="image" type="image/svg+xml" />
+        {/* Favicon (gif; will fallback to static in browsers that don’t animate) */}
+        <link rel="icon" href="/images/POOKIE BLANK WADDLE gif.gif" type="image/gif" />
+        <link rel="shortcut icon" href="/images/POOKIE BLANK WADDLE gif.gif" type="image/gif" />
+        <link rel="apple-touch-icon" href="/images/POOKIE BLANK WADDLE gif.gif" />
+        {/* Social share override to ensure crawlers pick up the gif */}
+        <meta property="og:image" content="/images/POOKIE THE PLASTIC PENGUIN.gif" />
+        <meta property="og:image:type" content="image/gif" />
+        <meta name="twitter:image" content="/images/POOKIE THE PLASTIC PENGUIN.gif" />
       </head>
       <body className={inter.className}>
         <ClientProviders>

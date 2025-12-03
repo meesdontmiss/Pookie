@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase-admin";
+import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
 type RouteContext = {
   params: {
@@ -11,6 +11,7 @@ const LOBBY_FIELDS =
   "id, max_players, current_players, status, wager_amount";
 
 async function fetchLobby(lobbyId: string) {
+  const supabaseAdmin = getSupabaseAdmin()
   const { data, error } = await supabaseAdmin
     .from("lobbies")
     .select(LOBBY_FIELDS)
@@ -25,6 +26,7 @@ async function fetchLobby(lobbyId: string) {
 }
 
 async function syncLobbyPlayerCount(lobbyId: string) {
+  const supabaseAdmin = getSupabaseAdmin()
   const { count } = await supabaseAdmin
     .from("lobby_players")
     .select("id", { count: "exact", head: true })
@@ -50,6 +52,7 @@ export async function GET(
   }
 
   try {
+    const supabaseAdmin = getSupabaseAdmin()
     const { data, error } = await supabaseAdmin
       .from("lobby_players")
       .select(
@@ -131,6 +134,7 @@ export async function POST(
       );
     }
 
+    const supabaseAdmin = getSupabaseAdmin()
     const { data: player, error } = await supabaseAdmin
       .from("lobby_players")
       .upsert(

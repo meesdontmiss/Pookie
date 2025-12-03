@@ -1,20 +1,21 @@
-import { createClient } from "@supabase/supabase-js"
+import { createClient, SupabaseClient } from "@supabase/supabase-js"
 
-const supabaseServiceUrl = process.env.SUPABASE_URL
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY
+let cachedClient: SupabaseClient | null = null
 
-if (!supabaseServiceUrl) {
-  throw new Error("SUPABASE_URL is required for server-side Supabase access.")
+export function getSupabaseAdmin(): SupabaseClient {
+  if (cachedClient) return cachedClient
+  const supabaseServiceUrl = process.env.SUPABASE_URL
+  // Support either SERVICE_KEY or SERVICE_ROLE_KEY
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!supabaseServiceUrl || !supabaseServiceKey) {
+    throw new Error("Supabase admin env not configured. Set SUPABASE_URL and SUPABASE_SERVICE_KEY.")
+  }
+  cachedClient = createClient(supabaseServiceUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      persistSession: false,
+    },
+  })
+  return cachedClient
 }
-
-if (!supabaseServiceKey) {
-  throw new Error("SUPABASE_SERVICE_KEY is required for server-side Supabase access.")
-}
-
-export const supabaseAdmin = createClient(supabaseServiceUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    detectSessionInUrl: false,
-    persistSession: false,
-  },
-})

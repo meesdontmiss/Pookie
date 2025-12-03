@@ -12,11 +12,23 @@ export default function CinematicExportPage() {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const timeoutRef = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const [scale, setScale] = useState(1);
+  const TARGET_W = 1920;
+  const TARGET_H = 1080;
 
   useEffect(() => {
+    const handle = () => {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const s = Math.min(vw / TARGET_W, vh / TARGET_H);
+      setScale(s);
+    };
+    handle();
+    window.addEventListener('resize', handle);
     return () => {
       if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
       try { recorderRef.current?.stop(); } catch {}
+      window.removeEventListener('resize', handle);
     };
   }, []);
 
@@ -44,7 +56,8 @@ export default function CinematicExportPage() {
         'video/webm',
       ];
       const mimeType = mimeCandidates.find((m) => MediaRecorder.isTypeSupported(m)) || '';
-      const rec = new MediaRecorder(stream, { mimeType });
+      // High bitrate for near-original quality (≈20–30 Mbps @1080p)
+      const rec = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 25000000 });
       recorderRef.current = rec;
       rec.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
@@ -79,7 +92,20 @@ export default function CinematicExportPage() {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000' }}>
-      <div ref={containerRef} style={{ position: 'absolute', inset: 0 }}>
+      {/* Fixed logical render size (1080p) scaled to fit window; captureStream uses the canvas logical size */}
+      <div
+        ref={containerRef}
+        style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          width: `${TARGET_W}px`,
+          height: `${TARGET_H}px`,
+          transform: `translate(-50%, -50%) scale(${scale})`,
+          transformOrigin: 'center center',
+          boxShadow: '0 0 0 1px rgba(255,255,255,0.05) inset',
+        }}
+      >
         {/* Use singleLayer for reliable capture (one canvas) */}
         <CinematicSumoBg singleLayer />
       </div>

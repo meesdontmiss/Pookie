@@ -421,7 +421,7 @@ export default function CinematicSumoBg({ singleLayer = false }: { singleLayer?:
     }
     return (
       <div style={{ position: 'absolute', inset: 0 }}>
-        <Canvas dpr={[1, 2]} gl={{ antialias: true, alpha: true }} camera={{ position: [35, 15, 35], fov: 50 }} style={{ width: '100%', height: '100%' }} shadows>
+        <Canvas dpr={[1, 2]} gl={{ antialias: true, alpha: true, preserveDrawingBuffer: true }} camera={{ position: [35, 15, 35], fov: 50 }} style={{ width: '100%', height: '100%' }} shadows>
           <CinematicCameraSingle />
           <ambientLight intensity={0.6} />
           <directionalLight position={[20, 30, 10]} intensity={1.5} castShadow />

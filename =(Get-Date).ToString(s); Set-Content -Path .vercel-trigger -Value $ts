@@ -1,0 +1,5 @@
+[33m2867fe9[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/master[m[33m, [m[1;31morigin/main[m[33m, [m[1;32mmaster[m[33m)[m fix(vercel): add missing sumo modules (levels, default-levels, importer, keyboard-controls, level-renderer) and collision visualization stub
+[33m15e2245[m fix(vercel): remove custom babel-loader rule and add stubs for missing contexts/stores
+[33ma3d7a62[m fix(vercel): align date-fns to ^3 to satisfy react-day-picker peer deps
+[33m7630e30[m fix(vercel): remove @react-three/postprocessing and revert fiber to ^8 to match React 18; drop lockfile for clean resolve
+[33ma34ec22[m fix(vercel): resolve peer deps by upgrading @react-three/fiber to ^9.4.2

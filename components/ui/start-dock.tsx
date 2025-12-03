@@ -21,7 +21,7 @@ export default function StartDock({ items }: { items: DockItem[] }) {
 
   const playSound = (type: 'hover' | 'down' | 'up') => {
     try {
-      const audio = new Audio('/sounds/click.mp3')
+      const audio = new Audio('/sounds/mouseclick.mp3')
       if (type === 'hover') {
         audio.volume = 0.35
         audio.playbackRate = 1.1

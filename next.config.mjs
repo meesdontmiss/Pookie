@@ -35,7 +35,9 @@ const nextConfig = {
     // Add a custom resolver for problematic modules
     config.resolve.alias = {
       ...config.resolve.alias,
-      'superpookieball': './components/superpookieball-game.tsx'
+      'superpookieball': './components/superpookieball-game.tsx',
+      // Ignore optional pretty printer dependency
+      'pino-pretty': false,
     };
     
     // Remove legacy babel-loader rule; Next.js uses SWC by default

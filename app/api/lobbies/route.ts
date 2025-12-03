@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { supabaseAdmin } from "@/lib/supabase-admin"
+import { getSupabaseAdmin } from "@/lib/supabase-admin"
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
@@ -20,6 +20,7 @@ export async function POST(request: Request) {
   }
 
   try {
+    const supabaseAdmin = getSupabaseAdmin()
     const { data, error } = await supabaseAdmin
       .from("lobbies")
       .insert({
@@ -46,6 +47,7 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
+    const supabaseAdmin = getSupabaseAdmin()
     const { data, error } = await supabaseAdmin
       .from("lobbies")
       .select("id, name, wager_amount, max_players, status, current_players")
