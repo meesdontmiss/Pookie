@@ -16,6 +16,9 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
   const [state, setState] = useState<LobbySocketState>({ players: [], countdown: null, status: 'open', connected: false })
   const socketRef = useRef<Socket | null>(null)
   const reconnectAttemptsRef = useRef(0)
+  const httpPollTimerRef = useRef<number | null>(null)
+  const httpJoinedRef = useRef(false)
+  const httpPlayerIdRef = useRef<string | null>(null)
   const urlCandidates = useMemo(() => {
     const list: string[] = []
     if (process.env.NEXT_PUBLIC_SOCKET_URL) list.push(process.env.NEXT_PUBLIC_SOCKET_URL)
@@ -47,11 +50,85 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
       autoConnect: true,
     })
 
+    // Lightweight HTTP fallback when socket cannot connect (join + poll)
+    const startHttpFallback = async () => {
+      if (!lobbyId || httpJoinedRef.current) return
+      try {
+        // Resolve identity similar to socket path
+        let effectiveWallet = wallet && typeof wallet === 'string' ? wallet : null
+        if (!effectiveWallet && typeof window !== 'undefined') {
+          effectiveWallet = localStorage.getItem('guest_id') || (window as any).__guestId || null
+        }
+        if (!effectiveWallet) {
+          const rnd =
+            (typeof window !== 'undefined' && (window.crypto as any)?.randomUUID?.()) ||
+            Math.random().toString(36).slice(2, 12)
+          effectiveWallet = `guest_${rnd}`
+          try {
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('guest_id', effectiveWallet)
+              ;(window as any).__guestId = effectiveWallet
+            }
+          } catch {}
+        }
+        const effectiveUsername = username || 'Player'
+        // Join (create/update) player
+        const res = await fetch(`/api/lobbies/${encodeURIComponent(lobbyId)}/players`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ walletAddress: effectiveWallet, username: effectiveUsername }),
+        })
+        const data = await res.json().catch(() => null as any)
+        if (res.ok && data?.player?.id) {
+          httpJoinedRef.current = true
+          httpPlayerIdRef.current = String(data.player.id)
+        }
+      } catch (e) {
+        // ignore
+      }
+      // Begin polling roster
+      const poll = async () => {
+        try {
+          const r = await fetch(`/api/lobbies/${encodeURIComponent(lobbyId)}/players`, { cache: 'no-store' })
+          const d = await r.json().catch(() => null as any)
+          const rows = Array.isArray(d?.players) ? d.players : []
+          const mapped: UIRoomPlayer[] = rows.map((p: any) => {
+            const wid = String(p.wallet_address || p.id || '').toLowerCase()
+            const wshort = wid ? `${wid.slice(0, 4)}...${wid.slice(-4)}` : ''
+            return {
+              id: wid,
+              username: String(p.username || 'Player'),
+              walletShort: wshort,
+              wager: 0,
+              wagerConfirmed: Boolean(p.wager_confirmed),
+              ready: Boolean(p.is_ready),
+            }
+          })
+          setState(prev => ({ ...prev, players: mapped }))
+        } catch {}
+      }
+      await poll()
+      try {
+        if (httpPollTimerRef.current) {
+          window.clearInterval(httpPollTimerRef.current)
+          httpPollTimerRef.current = null
+        }
+        httpPollTimerRef.current = window.setInterval(poll, 2000)
+      } catch {}
+    }
+
     const setupHandlers = (s: Socket) => {
       s.on('connect', () => {
         console.log('✅ Lobby socket connected:', s.id)
         setState((prev) => ({ ...prev, connected: true }))
         reconnectAttemptsRef.current = 0
+        // Stop HTTP fallback if running
+        try {
+          if (httpPollTimerRef.current) {
+            window.clearInterval(httpPollTimerRef.current)
+            httpPollTimerRef.current = null
+          }
+        } catch {}
         
         // Resolve wallet identity (guest-safe)
         let effectiveWallet = wallet && typeof wallet === 'string' ? wallet : null
@@ -163,7 +240,15 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
           })
           setupHandlers(socketInstance)
           socketRef.current = socketInstance
+          return
         }
+
+        // As last resort, start HTTP fallback join + polling
+        try {
+          if (!state.connected) {
+            setTimeout(() => { startHttpFallback() }, 500)
+          }
+        } catch {}
       })
 
       s.on('message', (msg: ServerToClient) => {
@@ -200,6 +285,19 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
     socketRef.current = socketInstance
 
     return () => {
+      // Cleanup HTTP fallback if active
+      try {
+        if (httpPollTimerRef.current) {
+          window.clearInterval(httpPollTimerRef.current)
+          httpPollTimerRef.current = null
+        }
+        if (httpJoinedRef.current && httpPlayerIdRef.current && lobbyId) {
+          const pid = httpPlayerIdRef.current
+          httpJoinedRef.current = false
+          httpPlayerIdRef.current = null
+          fetch(`/api/lobbies/${encodeURIComponent(lobbyId)}/players/${encodeURIComponent(pid)}`, { method: 'DELETE' }).catch(() => {})
+        }
+      } catch {}
       if (socketInstance) {
         socketInstance.emit('message', { type: 'leave_lobby', lobbyId } as ClientToServer)
         socketInstance.off()
