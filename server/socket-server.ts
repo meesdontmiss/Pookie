@@ -17,6 +17,7 @@ import EscrowService from '../lib/escrow-service'
 import { payoutFromEscrow } from '../lib/payout-service'
 import { refundFromEscrow } from '../lib/refund-service'
 import { getSupabaseAdmin } from '../lib/supabase-admin'
+import pino from 'pino'
 
 type LobbyId = string
 type Wallet = string
@@ -92,6 +93,7 @@ const socketToMatch = new Map<string, string>() // map socket.id -> matchId
 const socketToLobby = new Map<string, LobbyId>()
 
 const supabase = getSupabaseAdmin()
+const logger = pino({ name: 'sumo-socket', level: process.env.LOG_LEVEL || 'info' })
 const MAX_PAYMENT_ATTEMPTS = 5
 const MATCH_ELIMINATION_Y = -5
 
@@ -106,7 +108,7 @@ async function ensureSeedLobbies() {
     }))
     await supabase.from('lobbies').upsert(records, { onConflict: 'id' })
   } catch (error) {
-    console.error('[supabase] Failed to seed lobbies', error)
+    logger.error({ err: error }, 'Failed to seed lobbies')
   }
 }
 
@@ -219,8 +221,9 @@ async function updateLobbyStatusDb(lobbyId: LobbyId, status: string) {
       .from('lobbies')
       .update({ status })
       .eq('id', lobbyId)
+    logger.info({ lobbyId, status }, 'Lobby status updated')
   } catch (error) {
-    console.error('[supabase] Failed to update lobby status', { lobbyId, status, error })
+    logger.error({ lobbyId, status, err: error }, 'Failed to update lobby status')
   }
 }
 
@@ -233,7 +236,7 @@ async function resetLobbyPlayers() {
       .delete()
       .neq('lobby_id', '')
   } catch (error) {
-    console.error('[supabase] Failed to reset lobby players on startup', error)
+    logger.error({ err: error }, 'Failed to reset lobby players')
   }
 }
 
@@ -253,7 +256,7 @@ async function recordMatchStart(matchId: MatchId, lobbyId: LobbyId, gameMode: st
         started_at: new Date().toISOString(),
       })
   } catch (error) {
-    console.error('[supabase] Failed to record match start', { matchId, lobbyId, error })
+    logger.error({ matchId, lobbyId, err: error }, 'Failed to record match start')
   }
 }
 
@@ -268,7 +271,7 @@ async function recordMatchResult(matchId: MatchId, status: 'completed' | 'cancel
       })
       .eq('id', matchId)
   } catch (error) {
-    console.error('[supabase] Failed to record match result', { matchId, status, winnerWallet, error })
+    logger.error({ matchId, status, winnerWallet, err: error }, 'Failed to record match result')
   }
 }
 
@@ -306,8 +309,12 @@ async function finishMatch(matchId: MatchId, winnerWallet?: string) {
   if (winnerWallet) {
     await enqueuePayoutsForMatch(match, winnerWallet)
     await recordMatchResult(matchId, 'completed', winnerWallet)
+    metrics.matchesFinished += 1
+    logger.info({ matchId, winnerWallet }, 'Match finished')
   } else {
     await recordMatchResult(matchId, 'cancelled', undefined)
+    metrics.matchesFinished += 1
+    logger.info({ matchId }, 'Match cancelled')
   }
   io.to(matchId).emit('match_finished', { matchId, winner: winnerWallet ?? null })
 }
@@ -330,6 +337,8 @@ function handlePlayerStateUpdate(matchId: MatchId, wallet: Wallet, position: [nu
     existing.status = 'Out'
     match.eliminated.add(wallet)
     io.to(matchId).emit('player_eliminated', { matchId, playerId: wallet })
+      metrics.playerEliminations += 1
+      logger.info({ matchId, playerId: wallet }, 'Player eliminated')
     const alive = getAlivePlayers(match).filter((p) => !match.eliminated.has(p.wallet))
     if (alive.length <= 1) {
       const winner = alive[0]?.wallet
@@ -351,7 +360,7 @@ async function insertTransactionRecord(wallet: string | null, type: string, amou
         tx_signature: txSignature,
       })
   } catch (error) {
-    console.error('[supabase] Failed to insert transaction', { wallet, type, amount, relatedId, error })
+    logger.error({ wallet, type, amount, relatedId, err: error }, 'Failed to insert transaction')
   }
 }
 
@@ -447,6 +456,8 @@ async function processPaymentJobsOnce() {
         await insertTransactionRecord(adminWalletPublicKey, 'house_cut', result.houseAmountSol, matchId ?? null, 'House cut', result.signature)
         if (matchId) await recordMatchResult(matchId, 'completed', winnerPublicKey)
         await finalizeJob(job.id, 'completed', attempts, null, { ...payload, signature: result.signature })
+        metrics.paymentJobsCompleted += 1
+        logger.info({ jobId: job.id, type: job.job_type }, 'Payment job completed')
       } else if (job.job_type === 'refund') {
         const { escrowPublicKey, playerPublicKey, amountSol, txSignatureKey, description } = payload
         const result = await refundFromEscrow({
@@ -457,6 +468,8 @@ async function processPaymentJobsOnce() {
         await insertTransactionRecord(playerPublicKey, 'refund', amountSol, null, description ?? 'Lobby refund', result.signature)
         if (txSignatureKey) await updateWagerEventStatus(txSignatureKey, 'refunded')
         await finalizeJob(job.id, 'completed', attempts, null, { ...payload, signature: result.signature })
+        metrics.paymentJobsCompleted += 1
+        logger.info({ jobId: job.id, type: job.job_type }, 'Payment job completed')
       } else {
         throw new Error(`Unknown job type: ${job.job_type}`)
       }
@@ -464,6 +477,10 @@ async function processPaymentJobsOnce() {
       console.error('[payment-job] Failed', { id: job.id, error })
       const lastError = error?.message || String(error)
       await finalizeJob(job.id, attempts >= MAX_PAYMENT_ATTEMPTS ? 'failed' : 'pending', attempts, lastError)
+      if (attempts >= MAX_PAYMENT_ATTEMPTS) {
+        metrics.paymentJobsFailed += 1
+        logger.error({ jobId: job.id, type: job.job_type, lastError }, 'Payment job permanently failed')
+      }
     }
   }
 }
@@ -543,6 +560,8 @@ function tryStartCountdown(lobby: LobbyState) {
                 description: 'Auto-refund: countdown kick',
               }).catch((e) => console.error('❌ enqueue refund failed', e))
               processedRefunds.add(sigKey)
+            metrics.refundsQueued += 1
+            logger.info({ lobbyId: lobby.id, wallet, amount: p.wagerAmountSol }, 'Refund queued (countdown kick)')
             }
           }
           lobby.players.delete(wallet)
@@ -624,6 +643,8 @@ function startMatch(lobby: LobbyState) {
   activeMatches.set(matchId, snapshot)
   lastMatchByLobby.set(lobby.id, matchId)
   const gameMode = HARDCODED_LOBBIES.find((h) => h.id === lobby.id)?.gameMode ?? 'SMALL_SUMO'
+  metrics.matchesStarted += 1
+  logger.info({ lobbyId: lobby.id, matchId, seed, gameMode }, 'Match started')
   void recordMatchStart(matchId, lobby.id, gameMode, seed, snapshot.roster ?? [])
 
   const payload: GameStartPacket = {
@@ -698,6 +719,8 @@ io.on('connection', (socket) => {
         await upsertLobbyPlayerRecord(lobby.id, playerState)
         await syncLobbyPlayerCountDb(lobby.id)
         broadcastLobby(lobby)
+        metrics.lobbyJoins += 1
+        logger.info({ lobbyId: lobby.id, wallet: data.wallet }, 'Player joined lobby')
       }
       if (data.type === 'confirm_wager') {
         const lobby = lobbies.get(data.lobbyId); if (!lobby) return
@@ -756,10 +779,11 @@ io.on('connection', (socket) => {
             player.escrowAddress = keys[escrowIndex]
             player.wagerAmountSol = lobby.wager
 
-            console.log(`✅ Wager verified: ${player.username} -> ${keys[escrowIndex]} (+${lobby.wager} SOL)`)
+            logger.info({ lobbyId: lobby.id, wallet: player.wallet, escrow: keys[escrowIndex], wager: lobby.wager }, 'Wager verified')
 
             broadcastLobby(lobby)
             await updateLobbyPlayerWager(lobby.id, player.wallet, lobby.wager, true, signature)
+            metrics.wagersLocked += 1
             tryStartCountdown(lobby)
           } catch (e: any) {
             console.error('❌ Wager verification failed:', e?.message || e)
@@ -779,6 +803,7 @@ io.on('connection', (socket) => {
         player.ready = data.ready
         broadcastLobby(lobby)
         await updateLobbyPlayerReady(lobby.id, player.wallet, player.ready)
+        logger.info({ lobbyId: lobby.id, wallet: player.wallet, ready: player.ready }, 'Player ready state')
         // For free lobbies, if at least one human ready and not enough players, schedule AI fill after 10s
         if (lobby.wager === 0) {
           const humansReady = Array.from(lobby.players.values()).filter(p => !p.isAi && p.ready).length
@@ -853,6 +878,8 @@ io.on('connection', (socket) => {
                 description: 'Auto-refund: player left lobby',
               }).catch((e) => console.error('❌ enqueue refund failed', e))
               processedRefunds.add(sigKey)
+              metrics.refundsQueued += 1
+              logger.info({ lobbyId: lobby.id, wallet, amount: p.wagerAmountSol }, 'Refund queued (player left)')
             }
             lobby.players.delete(wallet)
             socketToLobby.delete(socket.id)
@@ -862,6 +889,8 @@ io.on('connection', (socket) => {
         socket.leave(lobby.id)
         await syncLobbyPlayerCountDb(lobby.id)
         broadcastLobby(lobby)
+        metrics.lobbyLeaves += 1
+        logger.info({ lobbyId: lobby.id, wallet: p.wallet }, 'Player left lobby')
       }
       if (data.type === 'reconnect') {
         const lobby = lobbies.get(data.lobbyId); if (!lobby) return
@@ -924,6 +953,8 @@ io.on('connection', (socket) => {
       if (changed) {
         await syncLobbyPlayerCountDb(lobby.id)
         broadcastLobby(lobby)
+        metrics.lobbyLeaves += 1
+        logger.info({ lobbyId: lobby.id }, 'Player disconnected from lobby')
       }
     }
     socketToLobby.delete(socket.id)
@@ -931,9 +962,22 @@ io.on('connection', (socket) => {
   })
 })
 
+const metrics = {
+  lobbyJoins: 0,
+  lobbyLeaves: 0,
+  wagersLocked: 0,
+  refundsQueued: 0,
+  payoutsQueued: 0,
+  matchesStarted: 0,
+  matchesFinished: 0,
+  playerEliminations: 0,
+  paymentJobsCompleted: 0,
+  paymentJobsFailed: 0,
+}
+
 const PORT = process.env.PORT || 4001
-app.get('/health', (_req, res) => res.json({ ok: true }))
-server.listen(PORT, () => console.log(`[sumo-socket] listening on ${PORT}`))
+app.get('/health', (_req, res) => res.json({ ok: true, metrics }))
+server.listen(PORT, () => logger.info({ port: PORT }, 'sumo socket listening'))
 
 const MATCH_TICK_INTERVAL_MS = 1000
 setInterval(() => {
