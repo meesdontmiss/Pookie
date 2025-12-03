@@ -16,7 +16,12 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
   const [state, setState] = useState<LobbySocketState>({ players: [], countdown: null, status: 'open', connected: false })
   const socketRef = useRef<Socket | null>(null)
   const reconnectAttemptsRef = useRef(0)
-  const url = useMemo(() => process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:4001', [])
+  const url = useMemo(() => {
+    // Prefer explicit env; fallback to current origin on client; dev fallback to localhost
+    if (process.env.NEXT_PUBLIC_SOCKET_URL) return process.env.NEXT_PUBLIC_SOCKET_URL
+    if (typeof window !== 'undefined') return window.location.origin
+    return 'http://localhost:4001'
+  }, [])
 
   useEffect(() => {
     if (!lobbyId) return
@@ -45,14 +50,39 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
         setState((prev) => ({ ...prev, connected: true }))
         reconnectAttemptsRef.current = 0
         
-        // Register identity first
-        if (wallet) {
-          s.emit('register_identity', wallet.toLowerCase())
+        // Resolve wallet identity (guest-safe)
+        let effectiveWallet = wallet && typeof wallet === 'string' ? wallet : null
+        try {
+          if (!effectiveWallet && typeof window !== 'undefined') {
+            effectiveWallet =
+              (localStorage.getItem('guest_id') ||
+                (window as any).__guestId ||
+                null)
+          }
+          if (!effectiveWallet) {
+            const rnd =
+              (typeof window !== 'undefined' &&
+                (window.crypto as any)?.randomUUID?.()) ||
+              Math.random().toString(36).slice(2, 12)
+            effectiveWallet = `guest_${rnd}`
+            try {
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('guest_id', effectiveWallet)
+                ;(window as any).__guestId = effectiveWallet
+              }
+            } catch {}
+          }
+        } catch {}
+
+        // Register identity (ack optional)
+        if (effectiveWallet) {
+          s.emit('register_identity', String(effectiveWallet).toLowerCase())
         }
-        
-        // Join lobby after identity registration
-        if (username && wallet) {
-          const join: ClientToServer = { type: 'join_lobby', lobbyId, username, wallet }
+
+        // Join lobby after identity resolution
+        const effectiveUsername = username || 'Player'
+        if (effectiveWallet && effectiveUsername) {
+          const join: ClientToServer = { type: 'join_lobby', lobbyId, username: effectiveUsername, wallet: String(effectiveWallet) }
           s.emit('message', join)
         }
         

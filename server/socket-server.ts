@@ -198,6 +198,35 @@ function startMatch(lobby: LobbyState) {
 }
 
 io.on('connection', (socket) => {
+  // Optional identity registration ACK (client emits this)
+  socket.on('register_identity', (_wallet: string) => {
+    try {
+      socket.emit('identity_registered')
+    } catch {}
+  })
+
+  // Provide on-demand lobby snapshot for a single client
+  socket.on('get_lobby_state', (lobbyId: LobbyId) => {
+    const lobby = lobbies.get(lobbyId)
+    if (!lobby) return
+    const players: UIRoomPlayer[] = Array.from(lobby.players.values()).map((p) => ({
+      id: p.wallet,
+      username: p.username,
+      walletShort: walletShort(p.wallet),
+      wager: lobby.wager,
+      wagerConfirmed: p.wagerLocked,
+      ready: p.ready,
+    }))
+    const message: ServerToClient = {
+      type: 'lobby_state',
+      lobbyId: lobby.id,
+      players,
+      countdown: lobby.countdown ?? undefined,
+      status: lobby.countdown !== null ? 'countdown' : 'open',
+    }
+    socket.emit('message', message)
+  })
+
   socket.on('message', (data: ClientToServer) => {
     try {
       if (data.type === 'join_lobby') {
