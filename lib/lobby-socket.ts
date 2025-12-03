@@ -207,7 +207,7 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
       }
       socketRef.current = null
     }
-  }, [lobbyId, url, username, wallet])
+  }, [lobbyId, urlCandidates, username, wallet])
 
   const confirmWager = (amount: number, txSignature: string) => {
     if (!socketRef.current || !lobbyId) return
