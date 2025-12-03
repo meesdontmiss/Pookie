@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-// import { io, Socket } from 'socket.io-client'; // Socket for game-specific events might be needed later or handled by SumoArenaScene
+import { io, Socket } from 'socket.io-client';
 import { useWallet } from '@solana/wallet-adapter-react';
 // import { Button } from '@/components/ui/button'; // Likely not needed for ready/bet anymore
 // import { supabase } from '@/services/supabase-config'; // If static details are needed and not passed
@@ -45,6 +45,8 @@ const RoyaleGameScene: React.FC<RoyaleGameSceneProps> = ({ lobbyId, isPractice }
   const [gameStaticDetails, setGameStaticDetails] = useState<GameStaticDetails | null>(null);
   const [gameStatusMessage, setGameStatusMessage] = useState<string>('Loading game...');
   const [isInGameView, setIsInGameView] = useState(true); // Assume true on load, SumoArenaScene manages its internal state
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [localUsername, setLocalUsername] = useState<string | null>(null);
   
   // This would be triggered by SumoArenaScene when a match/game ends
   const handleMatchComplete = useCallback(() => {
@@ -83,9 +85,30 @@ const RoyaleGameScene: React.FC<RoyaleGameSceneProps> = ({ lobbyId, isPractice }
       setIsInGameView(false);
     });
 
-    // If RoyaleGameScene itself needs to listen to game-specific socket events (not lobby events),
-    // that connection would be initialized here, perhaps passing lobbyId and publicKey.
-    // For now, we assume SumoArenaScene handles its own netcode or gets data via props.
+    // Connect a lightweight game socket for the active match room
+    try {
+      const isProd = process.env.NODE_ENV === 'production';
+      const url = process.env.NEXT_PUBLIC_SOCKET_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:4001');
+      const path = process.env.NEXT_PUBLIC_SOCKET_PATH || '/socket.io';
+      const transports = isProd ? ['websocket'] : ['polling','websocket'];
+      const s = io(url, { path, transports, addTrailingSlash: false, withCredentials: true, autoConnect: true });
+      const id = publicKey?.toBase58?.() || '';
+      const guest = (typeof window !== 'undefined') ? (localStorage.getItem('guest_id') || (window as any).__guestId) : null;
+      const identity = (id || guest || '').toString();
+      setLocalUsername(identity ? (identity.startsWith('guest_') ? identity : identity.slice(0,8)+'...') : null);
+      s.on('connect', () => {
+        try { if (identity) s.emit('register_identity', identity.toLowerCase()) } catch {}
+        try { s.emit('join_match_room', { matchSessionId: lobbyId }) } catch {}
+      });
+      setSocket(s);
+      return () => {
+        try { s.off() } catch {}
+        try { s.disconnect() } catch {}
+        setSocket(null);
+      };
+    } catch (e) {
+      console.warn('Failed to init game socket', e);
+    }
 
     return () => {
       console.log('[RoyaleGameScene] Unmounting game scene for lobbyId:', lobbyId);
@@ -137,11 +160,14 @@ const RoyaleGameScene: React.FC<RoyaleGameSceneProps> = ({ lobbyId, isPractice }
           We might want a loading overlay here until gameStaticDetails are fetched 
           and SumoArenaScene is ready to render or has established its connection.
         */}
-        {gameStaticDetails && publicKey && (
+        {gameStaticDetails && (
              <SumoArenaScene 
                 lobbyId={lobbyId} 
                 isPractice={isPractice} 
-                playerWalletAddress={publicKey.toBase58()} // Pass wallet address
+                playerWalletAddress={(publicKey?.toBase58?.() as string) || localUsername || ''} // local id
+                socket={socket}
+                localUsername={localUsername}
+                gameState={'ACTIVE' as any}
                 // gameDetails={gameStaticDetails} // Pass fetched details if SumoArenaScene needs them
                 onMatchComplete={handleMatchComplete} 
                 // It's assumed SumoArenaScene will handle its own socket for game state sync

@@ -56,10 +56,13 @@ interface ActiveMatch {
   lobbyId: LobbyId
   wagerPerPlayer: number
   players: Array<{ wallet: string; username: string; escrowAddress: string; amountSol: number }>
+  roster?: Array<{ wallet: string; username: string; isAi?: boolean }>
+  startedAt?: number
 }
 const activeMatches = new Map<MatchId, ActiveMatch>()
 const lastMatchByLobby = new Map<LobbyId, MatchId>()
 const processedRefunds = new Set<string>() // track by txSignature to avoid duplicates
+const socketToMatch = new Map<string, string>() // map socket.id -> matchId
 
 // Build in-memory lobbies from hardcoded list
 const lobbies = new Map<LobbyId, LobbyState>()
@@ -197,6 +200,8 @@ function startMatch(lobby: LobbyState) {
         escrowAddress: p.escrowAddress as string,
         amountSol: p.wagerAmountSol ?? lobby.wager,
       })),
+    roster: players.map((p) => ({ wallet: p.wallet, username: p.username, isAi: Boolean(p.isAi) })),
+    startedAt: Date.now(),
   }
   activeMatches.set(matchId, snapshot)
   lastMatchByLobby.set(lobby.id, matchId)
@@ -226,8 +231,9 @@ function startMatch(lobby: LobbyState) {
 
 io.on('connection', (socket) => {
   // Optional identity registration ACK (client emits this)
-  socket.on('register_identity', (_wallet: string) => {
+  socket.on('register_identity', (wallet: string) => {
     try {
+      ;(socket.data as any).wallet = typeof wallet === 'string' ? wallet : ''
       socket.emit('identity_registered')
     } catch {}
   })
@@ -497,6 +503,42 @@ io.on('connection', (socket) => {
     }
   })
 
+  // Room join for active match (clients provide matchSessionId)
+  socket.on('join_match_room', (payload: { matchSessionId: string }) => {
+    try {
+      const matchId = String(payload?.matchSessionId || '')
+      if (!matchId || !activeMatches.has(matchId)) return
+      socket.join(matchId)
+      socketToMatch.set(socket.id, matchId)
+      const match = activeMatches.get(matchId)!
+      // Minimal status snapshot
+      socket.emit('gameStatusUpdate', {
+        gameState: 'ACTIVE',
+        players: (match.roster || []).map(r => ({
+          id: r.wallet,
+          position: { x: 0, y: 0, z: 0 },
+          quaternion: { x: 0, y: 0, z: 0, w: 1 },
+          username: r.username,
+          status: 'In',
+        })),
+      })
+    } catch {}
+  })
+
+  // Relay player kinematic state to other participants (basic authoritative echo)
+  socket.on('playerStateUpdate', (data: { position: [number, number, number]; rotation: [number, number, number, number] }) => {
+    try {
+      const matchId = socketToMatch.get(socket.id)
+      const wallet = (socket.data as any)?.wallet || ''
+      if (!matchId || !wallet) return
+      socket.to(matchId).emit('playerStateUpdate', {
+        playerId: String(wallet).toLowerCase(),
+        position: data.position,
+        rotation: data.rotation,
+      })
+    } catch {}
+  })
+
   socket.on('disconnect', () => {
     // Remove player from any lobby
     for (const lobby of lobbies.values()) {
@@ -509,6 +551,7 @@ io.on('connection', (socket) => {
       }
       if (changed) broadcastLobby(lobby)
     }
+    socketToMatch.delete(socket.id)
   })
 })
 
