@@ -97,6 +97,17 @@ export default function LobbyPanel({
   const paidPlayers = players.filter(p => p.ready).length
   const allPlayersReady = (players.length >= minRequired) && players.every(p => p.ready)
   const currentPlayer = players.find(p => p.id === currentPlayerId)
+  // Keep local flags in sync with authoritative server state for instant UI reflection
+  useEffect(() => {
+    if (currentPlayer) {
+      if (myReady !== currentPlayer.ready) setMyReady(currentPlayer.ready)
+      if (myWagerConfirmed !== currentPlayer.wagerConfirmed) setMyWagerConfirmed(currentPlayer.wagerConfirmed)
+    } else {
+      if (myReady) setMyReady(false)
+      if (myWagerConfirmed) setMyWagerConfirmed(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPlayer?.ready, currentPlayer?.wagerConfirmed, currentPlayerId])
 
   const handleReadyToggle = async () => {
     if (missingIdentity) return
