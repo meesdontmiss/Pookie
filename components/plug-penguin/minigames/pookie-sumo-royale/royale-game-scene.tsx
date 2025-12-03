@@ -63,10 +63,10 @@ const RoyaleGameScene: React.FC<RoyaleGameSceneProps> = ({ lobbyId, isPractice }
     }
     // Allow wallet-less when isPractice
     if (!isPractice) {
-      if (!walletConnected || !publicKey) {
-          setGameStatusMessage('Wallet not connected. Please connect your wallet.');
-          setIsInGameView(false);
-          return;
+    if (!walletConnected || !publicKey) {
+        setGameStatusMessage('Wallet not connected. Please connect your wallet.');
+        setIsInGameView(false);
+        return;
       }
     }
 

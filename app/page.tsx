@@ -22,7 +22,7 @@ export default function Home() {
   const [isNavigating, setIsNavigating] = useState(false)
 
   useEffect(() => {
-    setShowClickHint(true)
+        setShowClickHint(true)
   }, [])
 
   const handleLoadComplete = () => {}
@@ -64,9 +64,9 @@ export default function Home() {
             src="/images/8bitlazersword.gif"
             alt="Right flamethrower"
             className={`${styles.flame} ${styles.flameRight}`}
-          />
-        </div>
-        
+        />
+      </div>
+
         {/* Waddle GIF in center */}
         <img
           src="/images/POOKIE BLANK WADDLE gif.gif"
@@ -74,7 +74,7 @@ export default function Home() {
           className={styles.waddleGif}
         />
       </div>
-
+      
       {/* Mac-style Dock */}
       {!isNavigating && (
         <StartDock
@@ -115,20 +115,20 @@ export default function Home() {
             },
           ]}
         />
-      )}
+        )}
 
-      {isLoading && !loadError && !loadTimeout && (
-        <div className="text-blue-300 animate-pulse">
-          Loading Plug Penguin...
-        </div>
-      )}
+        {isLoading && !loadError && !loadTimeout && (
+          <div className="text-blue-300 animate-pulse">
+            Loading Plug Penguin...
+          </div>
+        )}
 
-      {(loadError || loadTimeout) && (
+        {(loadError || loadTimeout) && (
         <div className={styles.warning}>
           <p className={styles.warningLine}>Experience the full magic on a desktop browser!</p>
           <p className={styles.warningLine}>This game doesn't work on mobile devices yet.</p>
-        </div>
-      )}
+          </div>
+        )}
     </main>
   )
 }
