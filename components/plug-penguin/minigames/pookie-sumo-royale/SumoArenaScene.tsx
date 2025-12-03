@@ -1169,8 +1169,12 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
   const [internalGameState, setInternalGameState] = useState<GameState>(initialGameStateFromParent);
   // ... (rest of state variables, make sure localPlayerGameStatus is one of them if used in GameStatusUI)
   const [localPlayerGameStatus, setLocalPlayerGameStatus] = useState<'InGame' | 'Eliminated' | 'Spectating'>('InGame');
-  const [winnerInfo, setWinnerInfo] = useState<{ username: string; score: number } | null>(null); // Ensure score is here
+  const [winnerInfo, setWinnerInfo] = useState<{ username: string; score?: number } | null>(null); // Ensure score is here
   const [countdownUIDisplay, setCountdownUIDisplay] = useState<number | null>(null);
+  const [remotePlayerEntities, setRemotePlayerEntities] = useState<Record<string, RemotePlayerStateData>>({});
+  const [livePlayersForHUD, setLivePlayersForHUD] = useState<LivePlayer[]>([]);
+  const [spectatedPlayerId, setSpectatedPlayerId] = useState<string | null>(null);
+  const [isSpectatorCamActive, setIsSpectatorCamActive] = useState(false);
 
 
   // Effect to synchronize internalGameState with prop changes, carefully
@@ -1199,22 +1203,55 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
         setInternalGameState(payload.gameState); // Server dictates the state
       }
       if (payload.winnerInfo) {
-        // Ensure winnerInfo from server includes a score, or handle if it doesn't
-        setWinnerInfo({ username: payload.winnerInfo.username, score: payload.winnerInfo.score || 0 }); // Default score to 0 if missing
+        setWinnerInfo({ username: payload.winnerInfo.username, score: payload.winnerInfo.score });
       } else if (payload.gameState === 'ACTIVE' || payload.gameState === 'WAITING' || payload.gameState === 'STARTING_COUNTDOWN') {
         setWinnerInfo(null); // Clear winner if game resets or is ongoing without a winner declared
       }
       if (payload.countdown !== undefined) {
         setCountdownUIDisplay(payload.countdown);
       }
-      // ... update other relevant states based on payload ...
+      if (payload.players && payload.players.length > 0) {
+        const entities: Record<string, RemotePlayerStateData> = {}
+        const hud: LivePlayer[] = payload.players.map((p, idx) => {
+          const wallet = p.id
+          entities[wallet] = {
+            id: wallet,
+            position: p.position || { x: 0, y: 0, z: 0 },
+            quaternion: p.quaternion || { x: 0, y: 0, z: 0, w: 1 },
+            username: p.username || wallet,
+            status: p.status,
+          }
+          return {
+            id: wallet,
+            username: p.username || `Player ${idx + 1}`,
+            status: p.status === 'Out' ? 'Out' : 'In',
+          }
+        })
+        setRemotePlayerEntities(entities)
+        setLivePlayersForHUD(hud)
+        if (spectatedPlayerId && entities[spectatedPlayerId] && entities[spectatedPlayerId].status === 'Out') {
+          setSpectatedPlayerId(null)
+        }
+      }
     };
 
     socket.on('gameStatusUpdate', handleGameStatusUpdate);
+    socket.on('player_eliminated', ({ playerId }) => {
+      setLivePlayersForHUD((prev) =>
+        prev.map((p) => (p.id === playerId ? { ...p, status: 'Out' } : p)),
+      )
+    })
+    socket.on('match_finished', ({ winner }) => {
+      if (winner) {
+        setWinnerInfo({ username: winner })
+      }
+    })
     return () => {
       socket.off('gameStatusUpdate', handleGameStatusUpdate);
+      socket.off('player_eliminated')
+      socket.off('match_finished')
     };
-  }, [socket]);
+  }, [socket, spectatedPlayerId]);
 
   // ... (rest of the component, many parts omitted for brevity) ...
   
@@ -1237,17 +1274,44 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
   // In render, pass the correct state to GameStatusUI
   return (
     <>
-                <GameStatusUI 
-                    gameState={internalGameState} 
-                    winnerInfo={winnerInfo} 
+      <GameStatusUI
+        gameState={internalGameState}
+        winnerInfo={winnerInfo}
         countdown={countdownUIDisplay}
-        isSpectating={localPlayerGameStatus === 'Spectating'} 
-        localPlayerGameStatus={localPlayerGameStatus} // Pass the prop
-        onMatchComplete={onMatchComplete} // Pass it down
+        isSpectating={localPlayerGameStatus === 'Spectating'}
+        localPlayerGameStatus={localPlayerGameStatus}
+        onMatchComplete={onMatchComplete}
       />
-      {/* ... rest of the Canvas and game elements ... */}
-      {/* Make sure any physics or game logic uses internalGameState */}
-      {/* Example for Physics component: <Physics debug={false} gravity={[0, -20, 0]} colliders={false} paused={internalGameState !== 'ACTIVE'}> */}
+      {socket && (
+        <SpectatorCameraHandler
+          isSpectatorCamActive={isSpectatorCamActive || localPlayerGameStatus !== 'InGame'}
+          spectatedPlayerId={spectatedPlayerId}
+          remotePlayerEntities={remotePlayerEntities}
+          livePlayersForHUD={livePlayersForHUD}
+          onSetSpectatedPlayerId={setSpectatedPlayerId}
+        />
+      )}
+      <GameHUD
+        players={livePlayersForHUD}
+        onPlayerNameClick={(id) => setSpectatedPlayerId(id)}
+        isSpectating={isSpectatorCamActive || localPlayerGameStatus === 'Spectating'}
+        spectatedPlayerId={spectatedPlayerId}
+        onSpectatePrevious={() => {
+          const alive = livePlayersForHUD.filter((p) => p.status === 'In')
+          if (alive.length === 0) return
+          const idx = alive.findIndex((p) => p.id === spectatedPlayerId)
+          const next = idx <= 0 ? alive[alive.length - 1] : alive[idx - 1]
+          setSpectatedPlayerId(next.id)
+        }}
+        onSpectateNext={() => {
+          const alive = livePlayersForHUD.filter((p) => p.status === 'In')
+          if (alive.length === 0) return
+          const idx = alive.findIndex((p) => p.id === spectatedPlayerId)
+          const next = idx === -1 || idx === alive.length - 1 ? alive[0] : alive[idx + 1]
+          setSpectatedPlayerId(next.id)
+        }}
+      />
+      {/* Canvas + physics would render below */}
     </>
   );
 };
