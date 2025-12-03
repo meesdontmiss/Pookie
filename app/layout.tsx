@@ -72,6 +72,7 @@ export default function RootLayout({
     <html lang="en" className="dark" suppressHydrationWarning>
       <head>
         <link rel="preload" href="/cursors/cursor.svg" as="image" type="image/svg+xml" />
+        <link rel="preload" href="/models/POOKIE.glb" as="fetch" crossOrigin="anonymous" />
         {/* Favicon (gif; will fallback to static in browsers that don’t animate) */}
         <link rel="icon" href="/images/POOKIE BLANK WADDLE gif.gif" type="image/gif" />
         <link rel="shortcut icon" href="/images/POOKIE BLANK WADDLE gif.gif" type="image/gif" />

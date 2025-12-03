@@ -21,7 +21,6 @@ export default function StartMiniPookieBall() {
       <Suspense fallback={<Html center style={{ pointerEvents: 'none', color: '#9ae6b4', fontWeight: 700 }}>Loading...</Html>}>
         <PookieInBallEffect position={[0, 0, 0]} scale={1.0} />
       </Suspense>
-      <Environment preset="city" />
     </Canvas>
   )
 }

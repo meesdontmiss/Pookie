@@ -6,6 +6,7 @@ import dynamic from "next/dynamic"
 import styles from "./HomeHero.module.css"
 import StartSnow from "@/components/start-snow"
 import StartDock from "@/components/ui/start-dock"
+import PreloadPookieOnIdle from "@/components/preload-pookie-on-idle"
 
 const StartMiniPookieBall = dynamic(() => import("@/components/start-mini-pookie-ball"), { 
   ssr: false,
@@ -39,6 +40,7 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen flex-col items-center relative overflow-hidden bg-gradient-to-b from-blue-900 to-black">
+      <PreloadPookieOnIdle />
       <StartSnow />
 
       <div className={styles.heroOverlay}>
