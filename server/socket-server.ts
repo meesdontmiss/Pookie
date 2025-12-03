@@ -30,6 +30,7 @@ interface PlayerState {
   escrowAddress?: string
   wagerAmountSol?: number
   refunded?: boolean
+  isAi?: boolean
 }
 
 interface LobbyState {
@@ -39,6 +40,7 @@ interface LobbyState {
   players: Map<Wallet, PlayerState>
   countdown: number | null
   countdownTimer?: NodeJS.Timeout
+  aiFillTimer?: NodeJS.Timeout
 }
 
 const app = express()
@@ -107,7 +109,7 @@ function tryStartCountdown(lobby: LobbyState) {
 
   const readyCount = players.filter((p) => p.ready).length
   const majority = Math.ceil(players.length / 2)
-  const allWagered = players.every((p) => p.wagerLocked)
+  const allWagered = lobby.wager === 0 ? true : players.every((p) => p.wagerLocked)
 
   if (readyCount >= majority && allWagered) {
     lobby.countdown = 5
@@ -153,6 +155,30 @@ function tryStartCountdown(lobby: LobbyState) {
   }
 }
 
+function fillAiPlayers(lobby: LobbyState) {
+  const current = Array.from(lobby.players.values())
+  // Count humans
+  const humans = current.filter(p => !p.isAi)
+  if (humans.length === 0) return
+  const needed = Math.max(0, lobby.capacity - current.length)
+  let added = 0
+  for (let i = 0; i < needed; i++) {
+    const id = `ai-${crypto.randomUUID().slice(0, 8)}`
+    lobby.players.set(id, {
+      socketId: `ai-${id}`,
+      wallet: id,
+      username: `AI ${i + 1}`,
+      ready: true,
+      wagerLocked: true,
+      isAi: true,
+    })
+    added++
+  }
+  if (added > 0) {
+    broadcastLobby(lobby)
+  }
+}
+
 function startMatch(lobby: LobbyState) {
   const seed = crypto.randomInt(0, 2 ** 31 - 1)
   const matchId = crypto.randomUUID()
@@ -183,6 +209,7 @@ function startMatch(lobby: LobbyState) {
       username: p.username,
       skin: 'default',
       spawnIndex: i,
+      isAi: Boolean(p.isAi),
     })),
     wagerAmount: lobby.wager,
     gameMode: HARDCODED_LOBBIES.find((h) => h.id === lobby.id)?.gameMode ?? 'SMALL_SUMO',
@@ -316,6 +343,24 @@ io.on('connection', (socket) => {
         }
         player.ready = data.ready
         broadcastLobby(lobby)
+        // For free lobbies, if at least one human ready and not enough players, schedule AI fill after 10s
+        if (lobby.wager === 0) {
+          const humansReady = Array.from(lobby.players.values()).filter(p => !p.isAi && p.ready).length
+          const totalPlayers = lobby.players.size
+          const needsAi = totalPlayers < lobby.capacity && humansReady >= 1
+          if (needsAi && !lobby.aiFillTimer) {
+            lobby.aiFillTimer = setTimeout(() => {
+              lobby.aiFillTimer = undefined
+              // If still not enough players, fill AI and start countdown
+              const stillHumansReady = Array.from(lobby.players.values()).filter(p => !p.isAi && p.ready).length
+              const stillTotal = lobby.players.size
+              if (stillHumansReady >= 1 && stillTotal < lobby.capacity) {
+                fillAiPlayers(lobby)
+                tryStartCountdown(lobby)
+              }
+            }, 10000)
+          }
+        }
         tryStartCountdown(lobby)
       }
       if (data.type === 'admin_end_match') {

@@ -23,7 +23,7 @@ export interface UIRoomPlayer {
 export interface GameStartPacket {
   matchId: string
   seed: number
-  players: Array<{ id: string; username: string; skin: string; spawnIndex: number }>
+  players: Array<{ id: string; username: string; skin: string; spawnIndex: number; isAi?: boolean }>
   wagerAmount: number
   gameMode: string
   serverTimestamp: number
