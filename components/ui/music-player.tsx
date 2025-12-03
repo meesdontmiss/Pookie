@@ -67,8 +67,14 @@ export default function MusicPlayer() {
 
   const getTrackName = (path: string) => {
     const filename = path.split('/').pop() || ''
-    const name = filename.replace(/^\d+_/, '').replace(/\.[^/.]+$/, '')
-    return name || 'Unknown Track'
+    const decoded = (() => {
+      try { return decodeURIComponent(filename) } catch { return filename }
+    })()
+    // strip extension
+    const noExt = decoded.replace(/\.[^/.]+$/, '')
+    // strip leading numbering like "01_" or "01- " etc.
+    const human = noExt.replace(/^\d+\s*[_-]?\s*/, '')
+    return human || 'Unknown Track'
   }
 
   return (
