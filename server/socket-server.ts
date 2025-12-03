@@ -59,6 +59,13 @@ interface LobbyState {
   aiFillTimer?: NodeJS.Timeout
 }
 
+interface PlayerRuntimeState {
+  position: [number, number, number]
+  rotation: [number, number, number, number]
+  status: 'In' | 'Out'
+  updatedAt: number
+}
+
 const app = express()
 const server = http.createServer(app)
 const io = new Server(server, {
@@ -74,6 +81,9 @@ interface ActiveMatch {
   players: Array<{ wallet: string; username: string; escrowAddress: string; amountSol: number }>
   roster?: Array<{ wallet: string; username: string; isAi?: boolean }>
   startedAt?: number
+  playerStates: Map<Wallet, PlayerRuntimeState>
+  eliminated: Set<Wallet>
+  finished?: boolean
 }
 const activeMatches = new Map<MatchId, ActiveMatch>()
 const lastMatchByLobby = new Map<LobbyId, MatchId>()
@@ -83,6 +93,7 @@ const socketToLobby = new Map<string, LobbyId>()
 
 const supabase = getSupabaseAdmin()
 const MAX_PAYMENT_ATTEMPTS = 5
+const MATCH_ELIMINATION_Y = -5
 
 async function ensureSeedLobbies() {
   try {
@@ -258,6 +269,72 @@ async function recordMatchResult(matchId: MatchId, status: 'completed' | 'cancel
       .eq('id', matchId)
   } catch (error) {
     console.error('[supabase] Failed to record match result', { matchId, status, winnerWallet, error })
+  }
+}
+
+function getAlivePlayers(match: ActiveMatch) {
+  const roster = match.roster ?? []
+  return roster.filter((p) => !match.eliminated.has(p.wallet))
+}
+
+async function enqueuePayoutsForMatch(match: ActiveMatch, winnerWallet: string | undefined) {
+  if (!winnerWallet) return
+  const byEscrow = new Map<string, number>()
+  for (const p of match.players) {
+    byEscrow.set(p.escrowAddress, (byEscrow.get(p.escrowAddress) || 0) + p.amountSol)
+  }
+  const housePct = Number(process.env.HOUSE_CUT_PERCENTAGE ?? '0.04')
+  const admin = process.env.NEXT_PUBLIC_ADMIN_WALLET || process.env.ADMIN_WALLET
+  if (!admin) throw new Error('Admin wallet not configured')
+  for (const [escrow, pot] of byEscrow.entries()) {
+    enqueuePaymentJob('payout', {
+      escrowPublicKey: escrow,
+      winnerPublicKey: winnerWallet,
+      totalPotSol: pot,
+      adminWalletPublicKey: admin,
+      houseCutPercentage: housePct,
+      matchId: match.id,
+    }).catch((e) => console.error('❌ enqueue payout failed', e))
+  }
+}
+
+async function finishMatch(matchId: MatchId, winnerWallet?: string) {
+  const match = activeMatches.get(matchId)
+  if (!match || match.finished) return
+  match.finished = true
+  activeMatches.delete(matchId)
+  if (winnerWallet) {
+    await enqueuePayoutsForMatch(match, winnerWallet)
+    await recordMatchResult(matchId, 'completed', winnerWallet)
+  } else {
+    await recordMatchResult(matchId, 'cancelled', undefined)
+  }
+  io.to(matchId).emit('match_finished', { matchId, winner: winnerWallet ?? null })
+}
+
+function handlePlayerStateUpdate(matchId: MatchId, wallet: Wallet, position: [number, number, number], rotation: [number, number, number, number]) {
+  const match = activeMatches.get(matchId)
+  if (!match) return
+  const existing = match.playerStates.get(wallet) || {
+    position: [0, 0, 0] as [number, number, number],
+    rotation: [0, 0, 0, 1] as [number, number, number, number],
+    status: 'In' as const,
+    updatedAt: 0,
+  }
+  existing.position = position
+  existing.rotation = rotation
+  existing.updatedAt = Date.now()
+  match.playerStates.set(wallet, existing)
+
+  if (existing.status === 'In' && position[1] < MATCH_ELIMINATION_Y) {
+    existing.status = 'Out'
+    match.eliminated.add(wallet)
+    io.to(matchId).emit('player_eliminated', { matchId, playerId: wallet })
+    const alive = getAlivePlayers(match).filter((p) => !match.eliminated.has(p.wallet))
+    if (alive.length <= 1) {
+      const winner = alive[0]?.wallet
+      void finishMatch(matchId, winner)
+    }
   }
 }
 
@@ -534,6 +611,16 @@ function startMatch(lobby: LobbyState) {
     roster: players.map((p) => ({ wallet: p.wallet, username: p.username, isAi: Boolean(p.isAi) })),
     startedAt: Date.now(),
   }
+  snapshot.playerStates = new Map<Wallet, PlayerRuntimeState>()
+  snapshot.eliminated = new Set<Wallet>()
+  for (const entry of snapshot.roster ?? []) {
+    snapshot.playerStates.set(entry.wallet, {
+      position: [0, 0, 0],
+      rotation: [0, 0, 0, 1],
+      status: 'In',
+      updatedAt: Date.now(),
+    })
+  }
   activeMatches.set(matchId, snapshot)
   lastMatchByLobby.set(lobby.id, matchId)
   const gameMode = HARDCODED_LOBBIES.find((h) => h.id === lobby.id)?.gameMode ?? 'SMALL_SUMO'
@@ -738,64 +825,17 @@ io.on('connection', (socket) => {
           return
         }
 
-        try {
-          const match = activeMatches.get(matchId)
-          if (!match) {
-            socket.emit('message', { type: 'error', message: 'Match not found', code: 'ERR_NOT_FOUND' } as ServerToClient)
-            return
-          }
-          const byEscrow = new Map<string, number>()
-          for (const p of match.players) {
-            byEscrow.set(p.escrowAddress, (byEscrow.get(p.escrowAddress) || 0) + p.amountSol)
-          }
-          const housePct = Number(process.env.HOUSE_CUT_PERCENTAGE ?? '0.04')
-          const admin = process.env.NEXT_PUBLIC_ADMIN_WALLET || process.env.ADMIN_WALLET
-          if (!admin) throw new Error('Admin wallet not configured')
-          for (const [escrow, pot] of byEscrow.entries()) {
-            enqueuePaymentJob('payout', {
-              escrowPublicKey: escrow,
-              winnerPublicKey: winner,
-              totalPotSol: pot,
-              adminWalletPublicKey: admin,
-              houseCutPercentage: housePct,
-              matchId,
-            }).catch((e) => console.error('❌ enqueue payout failed', e))
-          }
-          activeMatches.delete(matchId)
-        } catch (e: any) {
-          console.error('❌ Admin payout enqueue failed:', e?.message || e)
+        void finishMatch(matchId, winner).catch((e) => {
+          console.error('❌ Admin finish match failed:', e)
           socket.emit('message', { type: 'error', message: 'Payout enqueue failed', code: 'ERR_PAYOUT' } as ServerToClient)
-        }
+        })
       }
       if (data.type === 'match_result') {
         // Game client reports winner at end of match
         const matchId = (data as any).matchId as string | undefined
         const winner = (data as any).winnerWallet as string | undefined
         if (!matchId || !winner) return
-        try {
-          const match = activeMatches.get(matchId)
-          if (!match) return
-          const byEscrow = new Map<string, number>()
-          for (const p of match.players) {
-            byEscrow.set(p.escrowAddress, (byEscrow.get(p.escrowAddress) || 0) + p.amountSol)
-          }
-          const housePct = Number(process.env.HOUSE_CUT_PERCENTAGE ?? '0.04')
-          const admin = process.env.NEXT_PUBLIC_ADMIN_WALLET || process.env.ADMIN_WALLET
-          if (!admin) throw new Error('Admin wallet not configured')
-          for (const [escrow, pot] of byEscrow.entries()) {
-            enqueuePaymentJob('payout', {
-              escrowPublicKey: escrow,
-              winnerPublicKey: winner,
-              totalPotSol: pot,
-              adminWalletPublicKey: admin,
-              houseCutPercentage: housePct,
-              matchId,
-            }).catch((e) => console.error('❌ enqueue payout failed', e))
-          }
-          activeMatches.delete(matchId)
-        } catch (e) {
-          console.error('❌ Auto payout enqueue failed:', e)
-        }
+        void finishMatch(matchId, winner).catch((e) => console.error('❌ Auto finish match failed:', e))
       }
       if (data.type === 'leave_lobby') {
         const lobby = lobbies.get(data.lobbyId); if (!lobby) return
@@ -866,6 +906,7 @@ io.on('connection', (socket) => {
         position: data.position,
         rotation: data.rotation,
       })
+      handlePlayerStateUpdate(matchId, String(wallet), data.position, data.rotation)
     } catch {}
   })
 
@@ -898,18 +939,18 @@ const MATCH_TICK_INTERVAL_MS = 1000
 setInterval(() => {
   for (const [matchId, match] of activeMatches.entries()) {
     const elapsedSeconds = Math.floor((Date.now() - (match.startedAt || Date.now())) / 1000)
-    const roster = match.roster || []
+    const playersPayload = Array.from(match.playerStates.entries()).map(([id, state]) => ({
+      id,
+      username: match.roster?.find((p) => p.wallet === id)?.username || id,
+      status: state.status,
+      position: { x: state.position[0], y: state.position[1], z: state.position[2] },
+      quaternion: { x: state.rotation[0], y: state.rotation[1], z: state.rotation[2], w: state.rotation[3] },
+    }))
     const payload: GameStatusUpdatePayloadPayload = {
-      gameState: 'ACTIVE',
+      gameState: match.finished ? 'GAME_OVER' : 'ACTIVE',
       countdown: null,
       message: `Elapsed ${elapsedSeconds}s`,
-      players: roster.map((p) => ({
-        id: p.wallet,
-        username: p.username,
-        status: 'In',
-        position: { x: 0, y: 0, z: 0 },
-        quaternion: { x: 0, y: 0, z: 0, w: 1 },
-      })),
+      players: playersPayload,
     }
     io.to(matchId).emit('gameStatusUpdate', payload)
   }
