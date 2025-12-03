@@ -16,6 +16,7 @@ import { getTransactionDetails, solToLamports } from '../lib/solana-utils'
 import EscrowService from '../lib/escrow-service'
 import { payoutFromEscrow } from '../lib/payout-service'
 import { refundFromEscrow } from '../lib/refund-service'
+import { getSupabaseAdmin } from '../lib/supabase-admin'
 
 type LobbyId = string
 type Wallet = string
@@ -63,6 +64,153 @@ const activeMatches = new Map<MatchId, ActiveMatch>()
 const lastMatchByLobby = new Map<LobbyId, MatchId>()
 const processedRefunds = new Set<string>() // track by txSignature to avoid duplicates
 const socketToMatch = new Map<string, string>() // map socket.id -> matchId
+const socketToLobby = new Map<string, LobbyId>()
+
+const supabase = getSupabaseAdmin()
+
+async function ensureSeedLobbies() {
+  try {
+    const records = HARDCODED_LOBBIES.map((l) => ({
+      id: l.id,
+      name: l.name,
+      wager_amount: l.wager,
+      max_players: l.capacity,
+      status: 'open',
+    }))
+    await supabase.from('lobbies').upsert(records, { onConflict: 'id' })
+  } catch (error) {
+    console.error('[supabase] Failed to seed lobbies', error)
+  }
+}
+
+async function upsertLobbyPlayerRecord(lobbyId: LobbyId, player: PlayerState) {
+  if (player.isAi) return
+  try {
+    await supabase
+      .from('lobby_players')
+      .upsert(
+        {
+          lobby_id: lobbyId,
+          wallet_address: player.wallet,
+          username: player.username,
+          is_ready: player.ready,
+          wager_amount: player.wagerAmountSol ?? null,
+          wager_confirmed: player.wagerLocked,
+        },
+        { onConflict: 'lobby_id,wallet_address' },
+      )
+  } catch (error) {
+    console.error('[supabase] Failed to upsert lobby player', { lobbyId, wallet: player.wallet, error })
+  }
+}
+
+async function updateLobbyPlayerReady(lobbyId: LobbyId, wallet: Wallet, ready: boolean) {
+  try {
+    await supabase
+      .from('lobby_players')
+      .update({ is_ready: ready })
+      .eq('lobby_id', lobbyId)
+      .eq('wallet_address', wallet)
+  } catch (error) {
+    console.error('[supabase] Failed to update ready state', { lobbyId, wallet, error })
+  }
+}
+
+async function updateLobbyPlayerWager(lobbyId: LobbyId, wallet: Wallet, amount: number | undefined, confirmed: boolean, txSignature?: string) {
+  try {
+    await supabase
+      .from('lobby_players')
+      .update({ wager_amount: amount ?? null, wager_confirmed: confirmed })
+      .eq('lobby_id', lobbyId)
+      .eq('wallet_address', wallet)
+  } catch (error) {
+    console.error('[supabase] Failed to update wager state', { lobbyId, wallet, error })
+  }
+  if (txSignature) {
+    try {
+      await supabase
+        .from('wager_events')
+        .upsert(
+          {
+            lobby_id: lobbyId,
+            wallet_address: wallet,
+            amount: amount ?? 0,
+            tx_signature: txSignature,
+            status: 'locked',
+          },
+          { onConflict: 'tx_signature' },
+        )
+    } catch (error) {
+      console.error('[supabase] Failed to upsert wager event', { lobbyId, wallet, txSignature, error })
+    }
+  }
+}
+
+async function removeLobbyPlayerRecord(lobbyId: LobbyId, wallet: Wallet) {
+  if (wallet.startsWith('ai-')) return
+  try {
+    await supabase
+      .from('lobby_players')
+      .delete()
+      .eq('lobby_id', lobbyId)
+      .eq('wallet_address', wallet)
+  } catch (error) {
+    console.error('[supabase] Failed to remove lobby player', { lobbyId, wallet, error })
+  }
+}
+
+async function clearLobbyPlayersRecord(lobbyId: LobbyId) {
+  try {
+    await supabase
+      .from('lobby_players')
+      .delete()
+      .eq('lobby_id', lobbyId)
+  } catch (error) {
+    console.error('[supabase] Failed to clear lobby players', { lobbyId, error })
+  }
+}
+
+async function syncLobbyPlayerCountDb(lobbyId: LobbyId) {
+  try {
+    const { count, error } = await supabase
+      .from('lobby_players')
+      .select('id', { count: 'exact', head: true })
+      .eq('lobby_id', lobbyId)
+    if (error) throw error
+    await supabase
+      .from('lobbies')
+      .update({ current_players: count ?? 0 })
+      .eq('id', lobbyId)
+  } catch (error) {
+    console.error('[supabase] Failed to sync lobby player count', { lobbyId, error })
+  }
+}
+
+async function updateLobbyStatusDb(lobbyId: LobbyId, status: string) {
+  try {
+    await supabase
+      .from('lobbies')
+      .update({ status })
+      .eq('id', lobbyId)
+  } catch (error) {
+    console.error('[supabase] Failed to update lobby status', { lobbyId, status, error })
+  }
+}
+
+ensureSeedLobbies().catch((error) => console.error('[supabase] Seed error', error))
+
+async function resetLobbyPlayers() {
+  try {
+    await supabase
+      .from('lobby_players')
+      .delete()
+      .neq('lobby_id', '')
+  } catch (error) {
+    console.error('[supabase] Failed to reset lobby players on startup', error)
+  }
+}
+
+resetLobbyPlayers().catch((error) => console.error('[supabase] Reset players error', error))
 
 // Build in-memory lobbies from hardcoded list
 const lobbies = new Map<LobbyId, LobbyState>()
@@ -103,6 +251,7 @@ function clearCountdown(lobby: LobbyState) {
   if (lobby.countdownTimer) clearInterval(lobby.countdownTimer)
   lobby.countdownTimer = undefined
   lobby.countdown = null
+  void updateLobbyStatusDb(lobby.id, 'open')
 }
 
 function tryStartCountdown(lobby: LobbyState) {
@@ -117,6 +266,7 @@ function tryStartCountdown(lobby: LobbyState) {
   if (readyCount >= majority && allWagered) {
     lobby.countdown = 5
     broadcastLobby(lobby)
+    void updateLobbyStatusDb(lobby.id, 'countdown')
     lobby.countdownTimer = setInterval(() => {
       // Auto-kick unready/unwagered during countdown (refund paid-but-unready)
       for (const [wallet, p] of lobby.players.entries()) {
@@ -140,8 +290,10 @@ function tryStartCountdown(lobby: LobbyState) {
             }
           }
           lobby.players.delete(wallet)
+          void removeLobbyPlayerRecord(lobby.id, wallet)
         }
       }
+      void syncLobbyPlayerCountDb(lobby.id)
       if (lobby.players.size === 0) {
         clearCountdown(lobby)
         broadcastLobby(lobby)
@@ -225,8 +377,11 @@ function startMatch(lobby: LobbyState) {
 
   // Reset lobby after match start (or move to active match tracking)
   lobby.players.clear()
+  void clearLobbyPlayersRecord(lobby.id)
+  void syncLobbyPlayerCountDb(lobby.id)
   clearCountdown(lobby)
   broadcastLobby(lobby)
+  void updateLobbyStatusDb(lobby.id, 'in_match')
 }
 
 io.on('connection', (socket) => {
@@ -260,7 +415,7 @@ io.on('connection', (socket) => {
     socket.emit('message', message)
   })
 
-  socket.on('message', (data: ClientToServer) => {
+  socket.on('message', async (data: ClientToServer) => {
     try {
       if (data.type === 'join_lobby') {
         const lobby = lobbies.get(data.lobbyId)
@@ -268,7 +423,12 @@ io.on('connection', (socket) => {
         if (lobby.players.size >= lobby.capacity) return socket.emit('message', { type: 'error', message: 'Lobby full', code: 'ERR_LOBBY_FULL' } as ServerToClient)
         // Join room and add/replace state
         socket.join(lobby.id)
-        lobby.players.set(data.wallet, { socketId: socket.id, wallet: data.wallet, username: data.username, ready: false, wagerLocked: false })
+        const playerState: PlayerState = { socketId: socket.id, wallet: data.wallet, username: data.username, ready: false, wagerLocked: false }
+        lobby.players.set(data.wallet, playerState)
+        socketToLobby.set(socket.id, lobby.id)
+        ;(socket.data as any).wallet = data.wallet
+        await upsertLobbyPlayerRecord(lobby.id, playerState)
+        await syncLobbyPlayerCountDb(lobby.id)
         broadcastLobby(lobby)
       }
       if (data.type === 'confirm_wager') {
@@ -331,6 +491,7 @@ io.on('connection', (socket) => {
             console.log(`✅ Wager verified: ${player.username} -> ${keys[escrowIndex]} (+${lobby.wager} SOL)`)
 
             broadcastLobby(lobby)
+            await updateLobbyPlayerWager(lobby.id, player.wallet, lobby.wager, true, signature)
             tryStartCountdown(lobby)
           } catch (e: any) {
             console.error('❌ Wager verification failed:', e?.message || e)
@@ -349,6 +510,7 @@ io.on('connection', (socket) => {
         }
         player.ready = data.ready
         broadcastLobby(lobby)
+        await updateLobbyPlayerReady(lobby.id, player.wallet, player.ready)
         // For free lobbies, if at least one human ready and not enough players, schedule AI fill after 10s
         if (lobby.wager === 0) {
           const humansReady = Array.from(lobby.players.values()).filter(p => !p.isAi && p.ready).length
@@ -488,9 +650,12 @@ io.on('connection', (socket) => {
               })()
             }
             lobby.players.delete(wallet)
+            socketToLobby.delete(socket.id)
+            await removeLobbyPlayerRecord(lobby.id, wallet)
           }
         }
         socket.leave(lobby.id)
+        await syncLobbyPlayerCountDb(lobby.id)
         broadcastLobby(lobby)
       }
       if (data.type === 'reconnect') {
@@ -539,7 +704,7 @@ io.on('connection', (socket) => {
     } catch {}
   })
 
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
     // Remove player from any lobby
     for (const lobby of lobbies.values()) {
       let changed = false
@@ -547,10 +712,15 @@ io.on('connection', (socket) => {
         if (p.socketId === socket.id) {
           lobby.players.delete(wallet)
           changed = true
+          await removeLobbyPlayerRecord(lobby.id, wallet)
         }
       }
-      if (changed) broadcastLobby(lobby)
+      if (changed) {
+        await syncLobbyPlayerCountDb(lobby.id)
+        broadcastLobby(lobby)
+      }
     }
+    socketToLobby.delete(socket.id)
     socketToMatch.delete(socket.id)
   })
 })
@@ -558,5 +728,6 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 4001
 app.get('/health', (_req, res) => res.json({ ok: true }))
 server.listen(PORT, () => console.log(`[sumo-socket] listening on ${PORT}`))
+
 
 
