@@ -3,10 +3,40 @@
  * Pattern from Cock Combat with Solana-specific implementation
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL)!
-const supabaseServiceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY)!
+function getServiceEnv(): { url: string; key: string } {
+  // Support multiple env names. Prefer NEXT_* when provided.
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    || process.env.NEXT_SUPABASE_URL
+    || process.env.SUPABASE_URL
+    || ''
+
+  const key = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY
+    || process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY
+    || process.env.SUPABASE_SERVICE_ROLE_KEY
+    || process.env.SUPABASE_SERVICE_KEY
+    || ''
+
+  if (!url || !key) {
+    throw new Error('Supabase service env missing (url/key). Set NEXT_PUBLIC_SUPABASE_URL and NEXT_SUPABASE_SERVICE_ROLE_KEY (or server equivalents).')
+  }
+  return { url, key }
+}
+
+let cachedClient: SupabaseClient | null = null
+function getClient(): SupabaseClient {
+  if (cachedClient) return cachedClient
+  const { url, key } = getServiceEnv()
+  cachedClient = createClient(url, key, {
+    auth: {
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      persistSession: false,
+    },
+  })
+  return cachedClient
+}
 
 export interface EscrowWallet {
   id: 'A' | 'B'
@@ -14,7 +44,9 @@ export interface EscrowWallet {
 }
 
 export class EscrowService {
-  private static supabase = createClient(supabaseUrl, supabaseServiceKey)
+  private static get supabase() {
+    return getClient()
+  }
 
   /**
    * Get the currently active escrow wallet
