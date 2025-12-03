@@ -1,0 +1,135 @@
+"use client"
+
+import { useCallback, useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import dynamic from "next/dynamic"
+import styles from "./HomeHero.module.css"
+import StartSnow from "@/components/start-snow"
+import StartDock from "@/components/ui/start-dock"
+
+const StartMiniPookieBall = dynamic(() => import("@/components/start-mini-pookie-ball"), { 
+  ssr: false,
+  loading: () => <div style={{ width: '100%', height: '100%', background: 'transparent' }} />
+})
+
+export default function Home() {
+  const router = useRouter()
+
+  const [isLoading, setIsLoading] = useState(false)
+  const [loadError, setLoadError] = useState(false)
+  const [loadTimeout, setLoadTimeout] = useState(false)
+  const [showClickHint, setShowClickHint] = useState(false)
+  const [isNavigating, setIsNavigating] = useState(false)
+
+  useEffect(() => {
+    setShowClickHint(true)
+  }, [])
+
+  const handleLoadComplete = () => {}
+  const handleLoadError = () => {}
+
+  const handleNavigate = useCallback((destination: string) => {
+    if (isLoading || isNavigating) return
+
+    setIsNavigating(true)
+    router.push(destination)
+  }, [isLoading, isNavigating, router])
+
+  const handlePookieClick = () => handleNavigate('/plug-penguin')
+
+  return (
+    <main className="flex min-h-screen flex-col items-center relative overflow-hidden bg-gradient-to-b from-blue-900 to-black">
+      <StartSnow />
+
+      <div className={styles.heroOverlay}>
+        <div className={styles.heroRow}>
+          <img
+            src="/images/8bitlazersword.gif"
+            alt="Left flamethrower"
+            className={`${styles.flame} ${styles.flameLeft}`}
+          />
+          <div className={styles.heroCenter}>
+            <img
+              src="/images/TITLE-TEXT.gif"
+              alt="Plug Penguin Title"
+              className={styles.titleImage}
+            />
+            <img
+              src="/images/the-plastic-penguin-text-gif.gif"
+              alt="The Plastic Penguin Tagline"
+              className={styles.taglineImage}
+            />
+          </div>
+          <img
+            src="/images/8bitlazersword.gif"
+            alt="Right flamethrower"
+            className={`${styles.flame} ${styles.flameRight}`}
+          />
+        </div>
+        
+        {/* Waddle GIF in center */}
+        <img
+          src="/images/POOKIE BLANK WADDLE gif.gif"
+          alt="Pookie Waddle"
+          className={styles.waddleGif}
+        />
+      </div>
+
+      {/* Mac-style Dock */}
+      {!isNavigating && (
+        <StartDock
+          items={[
+            {
+              key: 'sumo',
+              title: 'Pookie Sumo Ball',
+              onClick: () => handleNavigate('/pookiesumoroyale/lobby-browser'),
+              render: <StartMiniPookieBall />,
+            },
+            {
+              key: 'hub',
+              title: 'Social Hub',
+              onClick: () => handleNavigate('/plug-penguin'),
+              imageSrc: '/images/pookies-smokin-shootin-dice-png.png',
+              imageStyle: { objectFit: 'contain' },
+            },
+            {
+              key: 'gallery',
+              title: 'Gallery',
+              onClick: () => handleNavigate('/gallery'),
+              imageSrc: '/images/jeet-me.png',
+              imageStyle: { objectFit: 'contain' },
+            },
+            {
+              key: 'pookhub',
+              title: 'PookHub',
+              onClick: () => window.open('https://www.pornhub.com/model/pookiethepeng', '_blank'),
+              imageSrc: '/images/pookie-smashin.gif',
+              imageStyle: { objectFit: 'contain' },
+            },
+            {
+              key: 'dexscreener',
+              title: 'Dexscreener',
+              onClick: () => window.open('https://dexscreener.com', '_blank'),
+              imageSrc: '/images/POOKIE DOLLAR.jpg',
+              imageStyle: { objectFit: 'contain' },
+            },
+          ]}
+        />
+      )}
+
+      {isLoading && !loadError && !loadTimeout && (
+        <div className="text-blue-300 animate-pulse">
+          Loading Plug Penguin...
+        </div>
+      )}
+
+      {(loadError || loadTimeout) && (
+        <div className={styles.warning}>
+          <p className={styles.warningLine}>Experience the full magic on a desktop browser!</p>
+          <p className={styles.warningLine}>This game doesn't work on mobile devices yet.</p>
+        </div>
+      )}
+    </main>
+  )
+}
+

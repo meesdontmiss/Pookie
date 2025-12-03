@@ -1,0 +1,170 @@
+{
+  "name": "Igloo",
+  "groups": [
+    {
+      "id": "8c49a47e-6c1c-456b-a1c1-0eabafdd3103",
+      "name": "Igloo",
+      "description": "No description provided",
+      "shapes": [
+        {
+          "id": "jbt7vtqmt",
+          "type": "capsule",
+          "position": {
+            "x": 23.8,
+            "y": -45.400000000000006,
+            "z": -36.5
+          },
+          "scale": {
+            "x": 71.1,
+            "y": 66.1,
+            "z": 71.1
+          },
+          "rotation": {
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "order": "XYZ"
+          },
+          "hasCollision": true,
+          "createdAt": "2025-03-14T21:45:25.182Z",
+          "lastModified": "2025-03-14T21:45:25.182Z"
+        },
+        {
+          "id": "h5wabocyd",
+          "type": "box",
+          "position": {
+            "x": 36,
+            "y": 0,
+            "z": -59.35
+          },
+          "scale": {
+            "x": 2.1,
+            "y": 11.1,
+            "z": 3.1
+          },
+          "rotation": {
+            "x": 0,
+            "y": 0.5061454830783556,
+            "z": -0.017453292519943295,
+            "order": "XYZ"
+          },
+          "hasCollision": true,
+          "createdAt": "2025-03-14T21:45:25.182Z",
+          "lastModified": "2025-03-14T21:45:25.182Z"
+        },
+        {
+          "id": "nkrzjlznr",
+          "type": "box",
+          "position": {
+            "x": 47,
+            "y": 0,
+            "z": -35.35
+          },
+          "scale": {
+            "x": 2.1,
+            "y": 11.1,
+            "z": 3.1
+          },
+          "rotation": {
+            "x": 0,
+            "y": 0.5061454830783556,
+            "z": -0.017453292519943295,
+            "order": "XYZ"
+          },
+          "hasCollision": true,
+          "createdAt": "2025-03-14T21:45:25.182Z",
+          "lastModified": "2025-03-14T21:45:25.182Z"
+        },
+        {
+          "id": "whzkvo1wc",
+          "type": "sphere",
+          "position": {
+            "x": 42,
+            "y": 8.6,
+            "z": -48
+          },
+          "scale": {
+            "x": 10.1,
+            "y": 10.1,
+            "z": 10.1
+          },
+          "rotation": {
+            "x": 0,
+            "y": 0.5061454830783556,
+            "z": -0.017453292519943295,
+            "order": "XYZ"
+          },
+          "hasCollision": true,
+          "createdAt": "2025-03-14T21:45:25.182Z",
+          "lastModified": "2025-03-14T21:45:25.182Z"
+        },
+        {
+          "id": "p92hyfv4n",
+          "type": "capsule",
+          "position": {
+            "x": 23.1,
+            "y": 0,
+            "z": -37.9
+          },
+          "scale": {
+            "x": 62.1,
+            "y": 26.1,
+            "z": 62.1
+          },
+          "rotation": {
+            "x": 0,
+            "y": 0.5061454830783556,
+            "z": -0.017453292519943295,
+            "order": "XYZ"
+          },
+          "hasCollision": false,
+          "createdAt": "2025-03-14T21:45:25.182Z",
+          "lastModified": "2025-03-14T21:45:25.182Z"
+        },
+        {
+          "id": "o8p78hapf",
+          "type": "box",
+          "position": {
+            "x": -10,
+            "y": 13,
+            "z": -17.2
+          },
+          "scale": {
+            "x": 11.1,
+            "y": 13.1,
+            "z": 11.1
+          },
+          "rotation": {
+            "x": 0,
+            "y": 0.5061454830783556,
+            "z": -0.017453292519943295,
+            "order": "XYZ"
+          },
+          "hasCollision": false,
+          "createdAt": "2025-03-14T21:45:25.182Z",
+          "lastModified": "2025-03-14T21:45:25.182Z"
+        }
+      ],
+      "metadata": {
+        "createdAt": "2025-03-14T21:45:25.182Z",
+        "lastModified": "2025-03-14T21:45:25.182Z",
+        "version": "1.0.0",
+        "gameVersion": "1.0.0",
+        "author": "",
+        "notes": "",
+        "tags": []
+      }
+    }
+  ],
+  "metadata": {
+    "createdAt": "2025-03-14T21:45:25.183Z",
+    "lastModified": "2025-03-14T21:45:25.183Z",
+    "version": "1.0.0",
+    "gameVersion": "1.0.0",
+    "totalShapes": 6,
+    "author": "",
+    "description": "",
+    "notes": "",
+    "tags": []
+  }
+}

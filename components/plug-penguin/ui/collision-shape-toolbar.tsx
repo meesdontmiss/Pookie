@@ -1,0 +1,2577 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { Button, Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Input, Textarea, Switch, Select, SelectItem, Checkbox } from '@nextui-org/react'
+import { 
+  Plus, 
+  Minus, 
+  Trash, 
+  Trash2,
+  Upload, 
+  Download, 
+  Lock, 
+  Unlock, 
+  Box, 
+  Circle, 
+  Cylinder, 
+  Move, 
+  RotateCcw, 
+  Maximize, 
+  Maximize2,
+  Layers, 
+  Eye, 
+  EyeOff, 
+  Check, 
+  X, 
+  ChevronDown, 
+  ChevronUp,
+  Save,
+  List,
+  FileUp,
+  Shield,
+  ShieldOff,
+  Copy
+} from 'lucide-react'
+import { useCollisionShape } from '@/components/game/collision-shape-context'
+import * as THREE from 'three'
+import { PlacedShape } from '@/components/game/collision-shape-types'
+import { 
+  createCollisionGroup, 
+  createCollisionMap, 
+  exportCollisionMap, 
+  importCollisionMap, 
+  exportToFile,
+  generateExportFilename,
+  exportToShape,
+  validateRotationOrder
+} from '@/components/game/collision-shape-utils'
+
+// Custom Capsule Icon component
+function CapsuleIcon({ className = "w-6 h-6" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M12 3a4 4 0 0 1 4 4v10a4 4 0 0 1-8 0V7a4 4 0 0 1 4-4z" />
+    </svg>
+  )
+}
+
+// Custom Slider component with better visibility
+function EnhancedSlider({ 
+  value, 
+  onChange, 
+  min = 0.1, 
+  max = 100, 
+  step = 0.1, 
+  label,
+  className = ""
+}: { 
+  value: number
+  onChange: (value: number) => void
+  min?: number
+  max?: number
+  step?: number
+  label: string
+  className?: string
+}) {
+  return (
+    <div className={`flex flex-col gap-1 ${className}`}>
+      <div className="flex justify-between items-center">
+        <label className="text-xs font-medium text-gray-300">{label}</label>
+        <span className="text-xs text-gray-400">{value.toFixed(2)}</span>
+      </div>
+      <div className="relative w-full h-6 flex items-center">
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          onChange={(e) => onChange(parseFloat(e.target.value))}
+          className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer
+                     [&::-webkit-slider-thumb]:appearance-none
+                     [&::-webkit-slider-thumb]:w-4
+                     [&::-webkit-slider-thumb]:h-4
+                     [&::-webkit-slider-thumb]:rounded-full
+                     [&::-webkit-slider-thumb]:bg-white
+                     [&::-webkit-slider-thumb]:cursor-pointer
+                     [&::-webkit-slider-thumb]:border-2
+                     [&::-webkit-slider-thumb]:border-primary
+                     [&::-webkit-slider-thumb]:transition-all
+                     [&::-webkit-slider-thumb]:hover:bg-primary
+                     [&::-webkit-slider-thumb]:hover:border-white
+                     [&::-moz-range-thumb]:appearance-none
+                     [&::-moz-range-thumb]:w-4
+                     [&::-moz-range-thumb]:h-4
+                     [&::-moz-range-thumb]:rounded-full
+                     [&::-moz-range-thumb]:bg-white
+                     [&::-moz-range-thumb]:cursor-pointer
+                     [&::-moz-range-thumb]:border-2
+                     [&::-moz-range-thumb]:border-primary
+                     [&::-moz-range-thumb]:transition-all
+                     [&::-moz-range-thumb]:hover:bg-primary
+                     [&::-moz-range-thumb]:hover:border-white"
+        />
+      </div>
+    </div>
+  )
+}
+
+// Helper function to create THREE.Euler objects with consistent rotation order
+function createEuler(x: number, y: number, z: number, order: string = 'XYZ'): THREE.Euler {
+  // Use EXACT values without any conversion
+  return new THREE.Euler(x, y, z, validateRotationOrder(order));
+}
+
+// Helper function to get values from a THREE.Euler object
+function getValuesFromEuler(euler: THREE.Euler): { x: number, y: number, z: number } {
+  return {
+    x: euler.x,
+    y: euler.y,
+    z: euler.z
+  };
+}
+
+/**
+ * Collision Shape Toolbar Component
+ * 
+ * IMPORTANT: For issues with rotation values, see docs/ROTATION_ISSUE_SOLUTION.md
+ * Rotation values must be handled carefully to avoid normalization issues with THREE.js
+ */
+export function CollisionShapeToolbar() {
+  // Get context values first, before any conditional returns
+  const { 
+    selectedShape,
+    setSelectedShape,
+    setIsPlacingShape,
+    shapeScale,
+    setShapeScale,
+    shapeRotation,
+    setShapeRotation,
+    placedShapes,
+    updateShapes,
+    canUndo,
+    canRedo,
+    undo,
+    redo,
+    toggleCollision,
+    selectedShapeId,
+    setSelectedShapeId,
+    isEditorEnabled,
+    recentlyImportedShapeIds,
+    setRecentlyImportedShapeIds,
+    playerPosition,
+    deleteShape
+  } = useCollisionShape()
+
+  // If editor is not enabled, don't render anything
+  if (!isEditorEnabled) return null
+
+  // Add state for uniform scale
+  const [uniformScale, setUniformScale] = useState(10)
+  
+  // Update uniformScale when shapeScale changes
+  useEffect(() => {
+    // Only update if all dimensions are equal
+    if (shapeScale.x === shapeScale.y && shapeScale.y === shapeScale.z) {
+      setUniformScale(shapeScale.x)
+    }
+  }, [shapeScale])
+
+  // Import/Export modal states
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false)
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false)
+  const [isShapeListOpen, setIsShapeListOpen] = useState(false)
+  const [groupName, setGroupName] = useState('')
+  const [groupDescription, setGroupDescription] = useState('')
+  const [author, setAuthor] = useState('')
+  const [notes, setNotes] = useState('')
+  const [tags, setTags] = useState('')
+  const [importAsPermanent, setImportAsPermanent] = useState(true)
+  const [isLockConfirmOpen, setIsLockConfirmOpen] = useState(false)
+  const [isGlbModalOpen, setIsGlbModalOpen] = useState(false)
+  const [assetName, setAssetName] = useState('')
+
+  // Define types for permanent maps
+  interface PermanentMapGroup {
+    id?: string;
+    name?: string;
+    description?: string;
+    shapes: string[];
+    createdAt?: string;
+    lastModified?: string;
+    assetPath?: string;
+  }
+
+  type PermanentMapsType = {
+    [key: string]: string[] | PermanentMapGroup;
+  };
+
+  // Add state for permanent maps modal
+  const [isPermanentMapsOpen, setIsPermanentMapsOpen] = useState(false)
+  const [permanentMaps, setPermanentMaps] = useState<PermanentMapsType>({})
+  const [isDeleteMapConfirmOpen, setIsDeleteMapConfirmOpen] = useState(false)
+  const [mapToDelete, setMapToDelete] = useState<string | null>(null)
+
+  // State for groups
+  const [groups, setGroups] = useState<{ [key: string]: string[] }>({})
+  const [isCreatingGroup, setIsCreatingGroup] = useState(false)
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
+  
+  // State for asset management
+  const [isAssetListOpen, setIsAssetListOpen] = useState(false)
+  const [customAssets, setCustomAssets] = useState<any[]>([])
+  
+  // Load custom assets when component mounts
+  useEffect(() => {
+    // Load assets from the API
+    fetch('/api/permanent-assets')
+      .then(response => response.json())
+      .then(data => {
+        if (data.assets && Array.isArray(data.assets)) {
+          setCustomAssets(data.assets);
+          console.log('Loaded custom assets:', data.assets);
+        }
+      })
+      .catch(error => {
+        console.error('Error loading custom assets:', error);
+      });
+  }, []);
+  
+  // State for GLB import
+  const [selectedModel, setSelectedModel] = useState<string>('')
+  const [isLoadingModels, setIsLoadingModels] = useState(false)
+  const [availableModels, setAvailableModels] = useState<string[]>([])
+  const [modelPosition, setModelPosition] = useState<[number, number, number]>([0, 0, 0])
+  const [modelRotation, setModelRotation] = useState<[number, number, number]>([0, 0, 0])
+  const [modelScale, setModelScale] = useState<number>(1)
+  const [modelDebug, setModelDebug] = useState<boolean>(false)
+  const [isPermanentPlacement, setIsPermanentPlacement] = useState<boolean>(true)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [usePlayerPosition, setUsePlayerPosition] = useState<boolean>(false)
+  
+  // Load available models when GLB modal is opened
+  useEffect(() => {
+    if (isGlbModalOpen) {
+      setIsLoadingModels(true);
+      
+      // Create an API endpoint to fetch models from the local folder
+      fetch('/api/list-models')
+        .then(response => response.json())
+        .then(data => {
+          if (data.models && Array.isArray(data.models)) {
+            setAvailableModels(data.models);
+          } else {
+            console.error('Invalid response format from list-models API:', data);
+            setAvailableModels([]);
+          }
+        })
+        .catch(error => {
+          console.error('Error loading models:', error);
+          setAvailableModels([]);
+        })
+        .finally(() => {
+          setIsLoadingModels(false);
+        });
+    }
+  }, [isGlbModalOpen]);
+
+  // Load permanent maps
+  const loadPermanentMaps = async () => {
+    try {
+      const response = await fetch('/api/permanent-groups')
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Loaded permanent maps:', data)
+        
+        // Ensure we have a valid groups object
+        if (data.groups && typeof data.groups === 'object') {
+          // Validate each group to ensure it has the correct structure
+          const validatedGroups: PermanentMapsType = {};
+          
+          Object.entries(data.groups).forEach(([groupId, groupData]) => {
+            // Check if groupData is an array (old format) or an object with shapes property (new format)
+            if (Array.isArray(groupData)) {
+              // Old format - just an array of shape IDs
+              validatedGroups[groupId] = groupData;
+            } else if (groupData && typeof groupData === 'object') {
+              // New format - an object with a shapes property
+              if ('shapes' in groupData && Array.isArray(groupData.shapes)) {
+                // Cast to PermanentMapGroup to ensure type safety
+                validatedGroups[groupId] = {
+                  id: groupData.id,
+                  name: groupData.name,
+                  description: groupData.description,
+                  shapes: groupData.shapes,
+                  createdAt: groupData.createdAt,
+                  lastModified: groupData.lastModified,
+                  assetPath: groupData.assetPath
+                } as PermanentMapGroup;
+              } else {
+                console.error(`Invalid group data structure for group ${groupId}:`, groupData);
+              }
+            } else {
+              console.error(`Invalid group data type for group ${groupId}:`, groupData);
+            }
+          });
+          
+          console.log('Validated permanent maps:', validatedGroups);
+          setPermanentMaps(validatedGroups);
+        } else {
+          console.error('Invalid groups data structure:', data)
+          setPermanentMaps({})
+        }
+      } else {
+        console.error('Failed to load permanent maps:', response.statusText)
+        setPermanentMaps({})
+      }
+    } catch (error) {
+      console.error('Error loading permanent maps:', error)
+      setPermanentMaps({})
+    }
+  }
+
+  // Delete permanent map
+  const deletePermanentMap = async (groupId: string) => {
+    try {
+      // Get all shape IDs in this group
+      const groupData = permanentMaps[groupId];
+      const shapeIds: string[] = Array.isArray(groupData) ? groupData : 
+        (groupData && typeof groupData === 'object' && 'shapes' in groupData && Array.isArray(groupData.shapes) ? 
+          groupData.shapes : []);
+      
+      if (shapeIds.length === 0) {
+        console.warn(`No shapes found for group ${groupId}`);
+      }
+      
+      // Delete each shape
+      for (const shapeId of shapeIds) {
+        await fetch(`/api/permanent-shapes?id=${shapeId}`, {
+          method: 'DELETE'
+        })
+      }
+      
+      // Delete the group
+      await fetch(`/api/permanent-groups?id=${groupId}`, {
+        method: 'DELETE'
+      })
+      
+      // Remove shapes from state
+      updateShapes(placedShapes.filter((shape: PlacedShape) => !shapeIds.includes(shape.id)))
+      
+      // Remove group from state
+      setPermanentMaps(prev => {
+        const newMaps = { ...prev }
+        delete newMaps[groupId]
+        return newMaps
+      })
+      
+      console.log(`Deleted permanent map: ${groupId}`)
+      setIsDeleteMapConfirmOpen(false)
+      setMapToDelete(null)
+    } catch (error) {
+      console.error('Error deleting permanent map:', error)
+      alert('Failed to delete permanent map. Please try again.')
+    }
+  }
+
+  // Load permanent maps when the component mounts
+  useEffect(() => {
+    loadPermanentMaps()
+  }, [])
+
+  // Helper functions for shape management
+  const formatVector = (v: THREE.Vector3 | THREE.Euler): string => {
+    if (v instanceof THREE.Vector3) {
+      return `[${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)}]`;
+    } else if (v instanceof THREE.Euler) {
+      return `[${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)}]`;
+    }
+    return '[0, 0, 0]';
+  };
+
+  // Group management functions
+  const createGroup = (name: string) => {
+    if (!name.trim()) return;
+    
+    setGroups(prev => ({
+      ...prev,
+      [name]: []
+    }));
+    
+    setIsCreatingGroup(false);
+    setGroupName('');
+  };
+
+  const deleteGroup = (groupId: string) => {
+    setGroups(prev => {
+      const newGroups = { ...prev };
+      delete newGroups[groupId];
+      return newGroups;
+    });
+    
+    if (selectedGroup === groupId) {
+      setSelectedGroup(null);
+    }
+  };
+
+  const addToGroup = (groupId: string, shapeId: string) => {
+    setGroups(prev => ({
+      ...prev,
+      [groupId]: [...(prev[groupId] || []), shapeId]
+    }));
+  };
+
+  const removeFromGroup = (groupId: string, shapeId: string) => {
+    setGroups(prev => ({
+      ...prev,
+      [groupId]: prev[groupId].filter(id => id !== shapeId)
+    }));
+  };
+
+  const getGroupShapes = (groupId: string) => {
+    const shapeIds = groups[groupId] || [];
+    return placedShapes.filter(shape => shapeIds.includes(shape.id));
+  };
+
+  const getUngroupedShapes = () => {
+    const allGroupedShapeIds = Object.values(groups).flat();
+    return placedShapes.filter(shape => !allGroupedShapeIds.includes(shape.id));
+  };
+
+  const handleDeleteShape = (id: string) => {
+    deleteShape(id);
+    
+    // Also remove from any groups
+    Object.keys(groups).forEach(groupId => {
+      if (groups[groupId].includes(id)) {
+        removeFromGroup(groupId, id);
+      }
+    });
+  };
+
+  // GLB import functions
+  const handlePositionChange = (axis: 'x' | 'y' | 'z', value: number) => {
+    setModelPosition(prev => {
+      const newPosition = [...prev] as [number, number, number];
+      switch (axis) {
+        case 'x': newPosition[0] = value; break;
+        case 'y': newPosition[1] = value; break;
+        case 'z': newPosition[2] = value; break;
+      }
+      return newPosition;
+    });
+  };
+
+  const handleModelRotationChange = (axis: 'x' | 'y' | 'z', value: number) => {
+    setModelRotation(prev => {
+      const newRotation = [...prev] as [number, number, number];
+      switch (axis) {
+        case 'x': newRotation[0] = value; break;
+        case 'y': newRotation[1] = value; break;
+        case 'z': newRotation[2] = value; break;
+      }
+      return newRotation;
+    });
+  };
+
+  // Handle file selection
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const file = e.target.files[0];
+      setSelectedFile(file);
+      setSelectedModel(file.name);
+      setAssetName(file.name.replace('.glb', ''));
+    }
+  };
+
+  const handleGlbImport = () => {
+    if (!selectedFile && !selectedModel) return;
+    
+    // Get the model name either from the selected file or the input
+    const modelFileName = selectedFile ? selectedFile.name : 
+      (selectedModel.toLowerCase().endsWith('.glb') ? selectedModel : `${selectedModel}.glb`);
+    
+    // Use player position if the option is selected
+    let finalPosition = modelPosition;
+    if (usePlayerPosition && playerPosition) {
+      finalPosition = [
+        playerPosition.x,
+        0, // Place at ground level
+        playerPosition.z
+      ] as [number, number, number];
+    }
+    
+    // Create the asset with the correct path and properly formatted position/rotation
+    const newAsset = {
+      id: Math.random().toString(36).substring(2, 15),
+      name: assetName || modelFileName.replace('.glb', ''),
+      url: `/models/${modelFileName}`, // This is the relative path used by the frontend
+      position: finalPosition as [number, number, number], // Ensure correct typing
+      rotation: modelRotation as [number, number, number], // Ensure correct typing
+      scale: modelScale,
+      debug: modelDebug,
+      isPermanent: isPermanentPlacement
+    };
+    
+    console.log('Importing GLB model with data:', newAsset);
+    
+    // Add the asset to the list
+    setCustomAssets(prev => [...prev, newAsset]);
+    
+    // If permanent, save to server
+    if (isPermanentPlacement) {
+      fetch('/api/permanent-assets', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          asset: newAsset
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          console.log('Successfully saved permanent asset:', data);
+          alert(`Model imported: ${modelFileName}\n\nThe model has been saved as a permanent asset and will appear in your current game scene. You don't need to go to the testing environment.`);
+        } else {
+          console.error('Failed to save permanent asset:', data);
+          alert(`Warning: Model was imported but could not be saved as a permanent asset. Error: ${data.error || 'Unknown error'}`);
+        }
+      })
+      .catch(error => {
+        console.error('Failed to save permanent asset:', error);
+        alert(`Warning: Model was imported but could not be saved as a permanent asset. Please check the console for details.`);
+      });
+    } else {
+      alert(`Model imported: ${modelFileName}\n\nNote: This is a temporary asset and will only be available in your current game scene. It will not persist when you reload the page.`);
+    }
+    
+    // Show success message
+    console.log(`Imported model: ${modelFileName}`);
+    
+    // Close the modal and reset state
+    setIsGlbModalOpen(false);
+    setSelectedFile(null);
+    setSelectedModel('');
+    setUsePlayerPosition(false);
+  };
+
+  const deleteAsset = (id: string) => {
+    setCustomAssets(prev => prev.filter(asset => asset.id !== id));
+    
+    // If it's a permanent asset, also delete from server
+    fetch(`/api/permanent-assets?id=${id}`, {
+      method: 'DELETE'
+    }).catch(error => {
+      console.error('Failed to delete permanent asset:', error);
+    });
+  };
+
+  // Define CustomAsset type
+  interface CustomAsset {
+    id: string;
+    name: string;
+    url: string;
+    position: [number, number, number];
+    rotation: [number, number, number];
+    scale: number;
+    debug: boolean;
+    isPermanent: boolean;
+  }
+
+  // Add a shape function that uses the context's addShape
+  const handleShapeSelect = (type: 'box' | 'sphere' | 'capsule') => {
+    setSelectedShape(type)
+    setIsPlacingShape(true)
+  }
+
+  const handleScaleChange = (axis: 'x' | 'y' | 'z', value: number) => {
+    const newScale = shapeScale.clone()
+    switch(axis) {
+      case 'x': newScale.x = Math.max(0.1, value); break
+      case 'y': newScale.y = Math.max(0.1, value); break
+      case 'z': newScale.z = Math.max(0.1, value); break
+    }
+    setShapeScale(newScale)
+  }
+
+  const handleUniformScaleChange = (value: number) => {
+    const scaledValue = value / 10 // Scale down for better control
+    setUniformScale(scaledValue)
+    setShapeScale(new THREE.Vector3(scaledValue, scaledValue, scaledValue))
+  }
+
+  const handleRotationChange = (axis: string, value: number) => {
+    if (!selectedShapeId) return;
+    
+    console.log(`Setting ${axis} rotation to:`, value);
+    
+    updateShapes(placedShapes.map((s: PlacedShape) => {
+      if (s.id !== selectedShapeId) return s;
+      
+      // Create a new Euler with the updated value for the specified axis
+      const newRotation = new THREE.Euler(
+        s.rotation.x,
+        s.rotation.y,
+        s.rotation.z,
+        s.rotation.order
+      );
+      
+      // Update the specified axis
+      if (axis === 'x') newRotation.x = value;
+      if (axis === 'y') newRotation.y = value;
+      if (axis === 'z') newRotation.z = value;
+      
+      console.log(`Updated rotation for shape ${s.id}:`, {
+        x: newRotation.x,
+        y: newRotation.y,
+        z: newRotation.z,
+        order: newRotation.order
+      });
+      
+      return {
+        ...s,
+        rotation: newRotation
+      };
+    }));
+  };
+
+  // Export functionality
+  const handleExport = () => {
+    const exportData = {
+      shapes: placedShapes,
+      groups: groups,
+      metadata: {
+          author,
+          notes,
+        tags: tags.split(',').map(tag => tag.trim()).filter(tag => tag),
+        description: groupDescription,
+        name: groupName,
+        createdAt: new Date().toISOString(),
+      }
+    }
+    
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `collision-map-${new Date().toISOString().slice(0, 10)}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+      setIsExportModalOpen(false)
+  }
+
+  const clearLocalStorage = () => {
+    try {
+      localStorage.removeItem('collision-shape-editor');
+      console.log('Cleared collision shapes from localStorage');
+      
+      // Reload the page to ensure all shapes are reloaded from the server
+      window.location.reload();
+    } catch (error) {
+      console.error('Error clearing localStorage:', error);
+    }
+  }
+
+  // Add state for editing group names
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null)
+  const [editedGroupName, setEditedGroupName] = useState<string>('')
+
+  // Function to save edited group name
+  const saveGroupName = async (groupId: string, newName: string) => {
+    if (!newName.trim()) {
+      setEditingGroupId(null)
+      return
+    }
+
+    try {
+      // Get the group data
+      const groupData = permanentMaps[groupId]
+      if (!groupData) {
+        console.error(`Group ${groupId} not found`)
+        return
+      }
+
+      // Create a new group ID with the new name
+      const newGroupId = newName.replace(/\s+/g, '_').toLowerCase()
+      
+      // If the name hasn't changed, just exit edit mode
+      if (newGroupId === groupId) {
+        setEditingGroupId(null)
+        return
+      }
+
+      // Create the updated group data
+      const updatedGroupData = Array.isArray(groupData) 
+        ? { shapes: groupData } 
+        : { ...groupData }
+
+      // Create the payload with the new group ID
+      const payload = {
+        groups: {
+          [newGroupId]: updatedGroupData
+        }
+      }
+
+      // Save the new group
+      const response = await fetch('/api/permanent-groups', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload)
+      })
+
+      if (response.ok) {
+        // Delete the old group
+        await fetch(`/api/permanent-groups?id=${groupId}`, {
+          method: 'DELETE'
+        })
+
+        // Update the local state
+        setPermanentMaps(prev => {
+          const newMaps = { ...prev }
+          delete newMaps[groupId]
+          newMaps[newGroupId] = groupData
+          return newMaps
+        })
+
+        console.log(`Renamed group from ${groupId} to ${newGroupId}`)
+      } else {
+        console.error('Failed to rename group:', await response.text())
+      }
+    } catch (error) {
+      console.error('Error renaming group:', error)
+    }
+
+    // Exit edit mode
+    setEditingGroupId(null)
+  }
+
+  // Handle import
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+      
+      if (data.shapes) {
+        // Process shapes to convert to THREE objects and generate new IDs
+        const processedShapes = data.shapes.map((shape: any) => {
+          // Generate a new unique ID for each shape
+          const newId = `${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 9)}`
+          
+          return {
+            ...shape,
+            id: newId, // Use the new ID instead of the original one
+            position: new THREE.Vector3(shape.position.x, shape.position.y, shape.position.z),
+            scale: new THREE.Vector3(shape.scale.x, shape.scale.y, shape.scale.z),
+            rotation: new THREE.Euler(
+              shape.rotation.x,
+              shape.rotation.y,
+              shape.rotation.z,
+              shape.rotation.order || 'XYZ'
+            )
+          }
+        })
+        
+        // Update shapes - no need to filter for duplicates since we're using new IDs
+        updateShapes([...placedShapes, ...processedShapes])
+        
+        // If there are groups, import them too
+        if (data.groups) {
+            setGroups(prevGroups => ({
+              ...prevGroups,
+            ...data.groups
+          }))
+        }
+        
+        // If this is a permanent import, save to localStorage AND to the server
+        if (importAsPermanent) {
+          const mapName = data.metadata?.name || file.name.replace('.json', '')
+          
+          // Create a group ID for the imported shapes
+          const groupId = `imported_${Date.now()}`
+          
+          // Get IDs of the newly added shapes - all shapes have new IDs
+          const newShapeIds = processedShapes.map((shape: { id: string }) => shape.id)
+          
+          // Only proceed if we have new shapes to save
+          if (newShapeIds.length > 0) {
+            // Save to permanent groups API
+            const groupData = {
+              [groupId]: {
+                id: groupId,
+                name: mapName,
+                description: data.metadata?.description || `Imported from ${file.name}`,
+                shapes: newShapeIds, // Only include the newly created shapes, not existing ones
+                createdAt: new Date().toISOString(),
+                lastModified: new Date().toISOString(),
+                assetPath: data.assetPath || ""
+              }
+            }
+            
+            // Save to server using the main game scene API endpoint
+            fetch('/api/permanent-groups', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                groups: groupData
+              })
+            })
+            .then(response => response.json())
+            .then(result => {
+              if (result.success) {
+                console.log('Successfully saved permanent collision map group:', result)
+                // Set the recently imported shape IDs so they can be locked if needed
+                setRecentlyImportedShapeIds(newShapeIds)
+                
+                // Refresh the permanent maps list
+                loadPermanentMaps()
+                
+                alert(`Collision map "${mapName}" has been imported and saved as permanent in the current game scene. You don't need to go to the testing environment.`)
+              } else {
+                console.error('Failed to save permanent collision map group:', result)
+                alert('Warning: Collision map was imported but could not be saved as permanent. See console for details.')
+              }
+            })
+            .catch(error => {
+              console.error('Error saving permanent collision map group:', error)
+              alert('Error: Failed to save permanent collision map. See console for details.')
+            })
+          } else {
+            console.log('No new shapes to save as permanent')
+            alert(`Collision map "${mapName}" was imported, but all shapes already exist in the scene.`)
+          }
+        } else {
+          // For temporary imports, just show an alert
+          const mapName = data.metadata?.name || file.name.replace('.json', '')
+          alert(`Collision map "${mapName}" has been imported as temporary and will only be available in your current game scene. It will not persist when you reload the page.`)
+        }
+      } else {
+        console.error('Invalid collision map format')
+      }
+    } catch (error) {
+      console.error('Error importing collision map:', error)
+    }
+    
+    setIsImportModalOpen(false)
+  }
+
+  // Lock recently imported shapes permanently
+  const lockRecentlyImportedShapes = async () => {
+    try {
+      // Filter shapes to lock
+      const shapesToLock = placedShapes.filter(shape => 
+        recentlyImportedShapeIds.includes(shape.id)
+      );
+      
+      if (shapesToLock.length === 0) {
+        console.log('No shapes to lock');
+        setIsLockConfirmOpen(false);
+        return;
+      }
+      
+      console.log(`Locking ${shapesToLock.length} shapes...`);
+      
+      // Clone shapes to avoid modifying the original
+      const shapesToSave = shapesToLock.map(shape => {
+        // Log rotation values before saving
+        console.log(`Shape ${shape.id} rotation before saving:`, {
+          x: shape.rotation.x,
+          y: shape.rotation.y,
+          z: shape.rotation.z,
+          order: shape.rotation.order,
+          groupId: shape.groupId
+        });
+        
+        // Create a serialized version of the shape
+        return {
+          id: shape.id,
+          type: shape.type,
+          position: {
+            x: shape.position.x,
+            y: shape.position.y,
+            z: shape.position.z
+          },
+          scale: {
+            x: shape.scale.x,
+            y: shape.scale.y,
+            z: shape.scale.z
+          },
+          rotation: {
+            x: shape.rotation.x,
+            y: shape.rotation.y,
+            z: shape.rotation.z,
+            order: shape.rotation.order
+          },
+          hasCollision: shape.hasCollision,
+          isLocked: true,
+          groupId: shape.groupId
+        };
+      });
+      
+      // Save shapes to server
+      const response = await fetch('/api/permanent-shapes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ shapes: shapesToSave })
+      });
+      
+      if (response.ok) {
+        console.log(`Saved ${shapesToSave.length} shapes to server`);
+        
+        // Organize shapes by group
+        const shapesWithGroups: Record<string, string[]> = {};
+        
+        // Group shapes by groupId
+        shapesToLock.forEach(shape => {
+          if (shape.groupId) {
+            if (!shapesWithGroups[shape.groupId]) {
+              shapesWithGroups[shape.groupId] = [];
+            }
+            shapesWithGroups[shape.groupId].push(shape.id);
+          }
+        });
+        
+        // Get unique group IDs
+        const groupIds = Object.keys(shapesWithGroups);
+        
+        if (groupIds.length > 0) {
+          console.log(`Saving ${groupIds.length} groups...`);
+          
+          // Create groups object to save
+          const groupsToSave: Record<string, string[]> = {};
+          
+          // Process each group
+          Object.entries(shapesWithGroups).forEach(([groupId, shapeIds]) => {
+            if (groupId && shapeIds.length > 0) {
+              console.log(`Saving group ${groupId} with ${shapeIds.length} shapes`);
+              
+              // Add to groups object
+              groupsToSave[groupId] = shapeIds;
+            }
+          });
+          
+          // Save groups to server
+          const groupsResponse = await fetch('/api/permanent-groups', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              groups: groupsToSave
+            })
+          });
+          
+          if (!groupsResponse.ok) {
+            console.error('Failed to save groups:', await groupsResponse.text());
+          } else {
+            console.log('Groups saved successfully');
+          }
+        }
+      }
+      
+      if (response.ok) {
+        console.log(`${shapesToSave.length} shapes locked permanently`);
+        
+        // Set isLocked to true for all recently imported shapes
+        const updatedShapes = placedShapes.map(shape => {
+          if (recentlyImportedShapeIds.includes(shape.id)) {
+            return {
+              ...shape,
+              isLocked: true
+            };
+          }
+          return shape;
+        });
+        
+        // Update shapes in state
+        updateShapes(updatedShapes);
+      
+      // Clear the recently imported shapes list
+        setRecentlyImportedShapeIds([]);
+        setIsLockConfirmOpen(false);
+      } else {
+        console.error('Failed to lock shapes:', await response.text());
+        alert('Failed to lock shapes permanently. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error locking shapes:', error);
+      alert('Failed to lock shapes permanently. Please try again.');
+    }
+  };
+  
+  // Load permanent shapes from server on initial load
+  useEffect(() => {
+    const loadPermanentShapes = async () => {
+      try {
+        console.log('Loading permanent shapes from server...')
+        const response = await fetch('/api/permanent-shapes')
+        if (response.ok) {
+          const data = await response.json()
+          const { shapes: permanentShapes, groups: savedGroups } = data
+          
+          console.log('Raw permanent shapes from server:', 
+            permanentShapes.map((s: any) => ({
+              id: s.id,
+              rotation: s.rotation,
+              groupId: s.groupId
+            }))
+          )
+          
+          if (permanentShapes && permanentShapes.length > 0) {
+            // Process permanent shapes
+            const processedShapes = permanentShapes
+              .filter((shape: any) => shape && shape.id)
+              .map((shape: any) => {
+                // Create position vector directly from the data without adjustments
+                const position = new THREE.Vector3(
+                  shape.position?.x ?? 0,
+                  shape.position?.y ?? 0,
+                  shape.position?.z ?? 0
+                )
+                
+                // Create scale vector directly from the data without adjustments
+                const scale = new THREE.Vector3(
+                  shape.scale?.x ?? 1,
+                  shape.scale?.y ?? 1,
+                  shape.scale?.z ?? 1
+                )
+                
+                // Create rotation euler directly from the data without adjustments
+                // Use EXACT values without any conversion
+                let shapeRotation;
+                
+                if (shape.rotation) {
+                  // Create rotation Euler with exact values from the server
+                  shapeRotation = new THREE.Euler(
+                    shape.rotation.x ?? 0,
+                    shape.rotation.y ?? 0,
+                    shape.rotation.z ?? 0,
+                    shape.rotation.order || 'XYZ'
+                  );
+                  
+                  console.log(`Loading shape ${shape.id} with rotation:`, {
+                    x: shapeRotation.x,
+                    y: shapeRotation.y,
+                    z: shapeRotation.z,
+                    order: shapeRotation.order
+                  });
+                } else {
+                  // Default rotation
+                  shapeRotation = new THREE.Euler(0, 0, 0, 'XYZ');
+                  console.log(`Loading shape ${shape.id} with default rotation:`, {
+                    x: shapeRotation.x,
+                    y: shapeRotation.y,
+                    z: shapeRotation.z,
+                    order: shapeRotation.order
+                  });
+                }
+                
+                // Create a new PlacedShape object with the loaded data
+                return {
+                  id: shape.id,
+                  type: shape.type || 'box',
+                  position,
+                  scale,
+                  rotation: shapeRotation,
+                  hasCollision: shape.hasCollision !== undefined ? shape.hasCollision : true,
+                  isLocked: shape.isLocked || false,
+                  groupId: shape.groupId || null,
+                  name: shape.name || `${shape.type || 'box'}-${shape.id.substring(0, 4)}`
+                };
+              });
+            
+            console.log('Processed permanent shapes:', 
+              processedShapes.map((s: PlacedShape) => ({
+                id: s.id,
+                rotation: {
+                  x: s.rotation.x,
+                  y: s.rotation.y,
+                  z: s.rotation.z,
+                  order: s.rotation.order
+                },
+                groupId: s.groupId
+              }))
+            );
+            
+            // Process saved groups if available
+            if (savedGroups && typeof savedGroups === 'object') {
+              console.log('Loading saved groups:', savedGroups);
+              setGroups(savedGroups);
+              
+              // Update groupId for shapes based on the saved groups
+              // This ensures shapes are correctly associated with their groups
+              if (Object.keys(savedGroups).length > 0) {
+                const shapeToGroupMap: Record<string, string> = {};
+                
+                // Create a mapping of shape IDs to group IDs
+                Object.entries(savedGroups).forEach(([groupId, shapeIds]: [string, any]) => {
+                  if (Array.isArray(shapeIds)) {
+                    shapeIds.forEach((shapeId: string) => {
+                      shapeToGroupMap[shapeId] = groupId;
+                    });
+                  }
+                });
+                
+                // Update the groupId for each shape based on the mapping
+                processedShapes.forEach((shape: PlacedShape) => {
+                  if (shapeToGroupMap[shape.id]) {
+                    shape.groupId = shapeToGroupMap[shape.id];
+                    console.log(`Assigned shape ${shape.id} to group ${shape.groupId}`);
+                  }
+                });
+              }
+            }
+            
+            // Update shapes in state
+            updateShapes(processedShapes);
+            
+            // Set a flag in localStorage to indicate that we have server shapes
+            // This will be used to clear localStorage on page load
+            localStorage.setItem('has-server-shapes', 'true');
+          }
+        } else {
+          console.error('Failed to load permanent shapes from server');
+        }
+      } catch (error) {
+        console.error('Error loading permanent shapes:', error);
+      }
+    };
+    
+    loadPermanentShapes();
+  }, []);
+
+  // State for quick place modal
+  const [isQuickPlaceModalOpen, setIsQuickPlaceModalOpen] = useState(false)
+  const [quickPlaceModel, setQuickPlaceModel] = useState<string>('')
+  const [quickPlaceScale, setQuickPlaceScale] = useState<number>(1)
+
+  // Handle quick place
+  const handleQuickPlace = () => {
+    if (!quickPlaceModel) return;
+    
+    // Ensure the model has .glb extension
+    const modelFileName = quickPlaceModel.toLowerCase().endsWith('.glb') 
+      ? quickPlaceModel 
+      : `${quickPlaceModel}.glb`;
+    
+    // Use player position
+    if (!playerPosition) {
+      alert('Player position not available. Please try again when the player is loaded.');
+      return;
+    }
+    
+    const position: [number, number, number] = [
+      playerPosition.x,
+      0, // Place at ground level
+      playerPosition.z
+    ];
+    
+    // Create the asset
+    const newAsset = {
+      id: Math.random().toString(36).substring(2, 15),
+      name: modelFileName.replace('.glb', ''),
+      url: `/models/${modelFileName}`,
+      position: position,
+      rotation: [0, 0, 0] as [number, number, number],
+      scale: quickPlaceScale,
+      debug: false,
+      isPermanent: true
+    };
+    
+    console.log('Quick placing GLB model with data:', newAsset);
+    
+    // Add the asset to the list
+    setCustomAssets(prev => [...prev, newAsset]);
+    
+    // Save to server
+    fetch('/api/permanent-assets', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        asset: newAsset
+      })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        console.log('Successfully saved permanent asset:', data);
+        alert(`Model placed: ${modelFileName}\n\nThe model has been placed at your current position.`);
+      } else {
+        console.error('Failed to save permanent asset:', data);
+        alert(`Warning: Model was placed but could not be saved as a permanent asset. Error: ${data.error || 'Unknown error'}`);
+      }
+    })
+    .catch(error => {
+      console.error('Failed to save permanent asset:', error);
+      alert(`Warning: Model was placed but could not be saved as a permanent asset. Please check the console for details.`);
+    });
+    
+    // Close the modal and reset state
+    setIsQuickPlaceModalOpen(false);
+    setQuickPlaceModel('');
+  };
+
+  return (
+    <div className="fixed top-4 left-1/2 -translate-x-1/2 p-6 bg-gray-900/60 rounded-lg shadow-lg backdrop-blur-md border border-gray-800/50 hover:bg-gray-900/75 transition-colors duration-200">
+      <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-800/50">
+        <h2 className="text-lg font-bold text-white">Collision Shape Editor</h2>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-400">{placedShapes.length} shapes</span>
+          <div className="h-4 w-px bg-gray-700"></div>
+          <span className="text-xs text-gray-400">{placedShapes.filter(s => s.hasCollision).length} collisions</span>
+        </div>
+      </div>
+      
+      <div className="flex gap-5 items-start">
+        {/* Shape Selection and History Controls */}
+        <div className="flex flex-col gap-4">
+          <div className="flex gap-2 justify-center">
+            <Button
+              isIconOnly
+              color="primary"
+              variant={selectedShape === 'box' ? 'solid' : 'ghost'}
+              onClick={() => handleShapeSelect('box')}
+              className={`w-10 h-10 ${selectedShape === 'box' ? 'text-white' : 'text-white/90 hover:text-white'}`}
+              aria-label="Box"
+            >
+              <Box className="w-5 h-5" />
+            </Button>
+            <Button
+              isIconOnly
+              color="primary"
+              variant={selectedShape === 'sphere' ? 'solid' : 'ghost'}
+              onClick={() => handleShapeSelect('sphere')}
+              className={`w-10 h-10 ${selectedShape === 'sphere' ? 'text-white' : 'text-white/90 hover:text-white'}`}
+              aria-label="Sphere"
+            >
+              <Circle className="w-5 h-5" />
+            </Button>
+            <Button
+              isIconOnly
+              color="primary"
+              variant={selectedShape === 'capsule' ? 'solid' : 'ghost'}
+              onClick={() => handleShapeSelect('capsule')}
+              className={`w-10 h-10 ${selectedShape === 'capsule' ? 'text-white' : 'text-white/90 hover:text-white'}`}
+              aria-label="Capsule"
+            >
+              <CapsuleIcon className="w-5 h-5" />
+            </Button>
+          </div>
+
+          <div className="h-px bg-gray-800 w-full" />
+
+          <div className="flex gap-2 justify-center">
+            <Button
+              isIconOnly
+              color="default"
+              onClick={undo}
+              isDisabled={!canUndo}
+              aria-label="Undo (Ctrl+Z)"
+              title="Undo (Ctrl+Z)"
+              className="w-8 h-8 bg-gray-800 hover:bg-gray-700"
+              size="sm"
+            >
+              <Minus className="w-4 h-4" />
+            </Button>
+            <Button
+              isIconOnly
+              color="default"
+              onClick={redo}
+              isDisabled={!canRedo}
+              aria-label="Redo (Ctrl+Y)"
+              title="Redo (Ctrl+Y)"
+              className="w-8 h-8 bg-gray-800 hover:bg-gray-700"
+              size="sm"
+            >
+              <Plus className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Scale Controls */}
+        <div className="flex flex-col gap-4 min-w-[200px]">
+          <div className="space-y-4">
+            <h3 className="text-sm font-medium text-gray-300">Scale</h3>
+            <EnhancedSlider
+              label="Uniform Scale"
+              value={uniformScale}
+              onChange={handleUniformScaleChange}
+              min={0.1}
+              max={100}
+              step={1}
+            />
+            <div className="space-y-3">
+              <EnhancedSlider
+                label="Scale X"
+                value={shapeScale.x}
+                onChange={(value) => handleScaleChange('x', value)}
+                max={100}
+                step={1}
+              />
+              <EnhancedSlider
+                label="Scale Y"
+                value={shapeScale.y}
+                onChange={(value) => handleScaleChange('y', value)}
+                max={100}
+                step={1}
+              />
+              <EnhancedSlider
+                label="Scale Z"
+                value={shapeScale.z}
+                onChange={(value) => handleScaleChange('z', value)}
+                max={100}
+                step={1}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Rotation Controls */}
+        <div className="flex flex-col gap-4 min-w-[200px]">
+          <div className="space-y-4">
+            <h3 className="text-sm font-medium text-gray-300">Rotation</h3>
+            <div className="space-y-3">
+              {/* Rotation values are stored and used exactly as is - no conversion */}
+              <EnhancedSlider
+                label="Rotation X"
+                value={getValuesFromEuler(shapeRotation).x}
+                onChange={(value) => handleRotationChange('x', value)}
+                min={-6.28}
+                max={6.28}
+                step={0.01}
+              />
+              <EnhancedSlider
+                label="Rotation Y"
+                value={getValuesFromEuler(shapeRotation).y}
+                onChange={(value) => handleRotationChange('y', value)}
+                min={-6.28}
+                max={6.28}
+                step={0.01}
+              />
+              <EnhancedSlider
+                label="Rotation Z"
+                value={getValuesFromEuler(shapeRotation).z}
+                onChange={(value) => handleRotationChange('z', value)}
+                min={-6.28}
+                max={6.28}
+                step={0.01}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex flex-col gap-4">
+          <h3 className="text-sm font-medium text-gray-300">Actions</h3>
+          <div className="flex flex-col gap-2">
+            <Button
+              color="primary"
+              variant="solid"
+              onClick={() => setIsExportModalOpen(true)}
+              startContent={<Save className="w-4 h-4" />}
+              className="w-full bg-blue-600 hover:bg-blue-700"
+              size="md"
+              title="Export Collision Map (Ctrl+S)"
+            >
+              <span className="text-white">Export</span>
+            </Button>
+            <Button
+              color="primary"
+              variant="ghost"
+              onClick={() => setIsImportModalOpen(true)}
+              startContent={<Upload className="w-4 h-4" />}
+              className="w-full"
+              size="sm"
+              title="Import Collision Map (Ctrl+I)"
+            >
+              <span className="text-white">Import Map</span>
+            </Button>
+            <Button
+              color="primary"
+              variant="ghost"
+              onClick={() => setIsShapeListOpen(true)}
+              startContent={<List className="w-4 h-4" />}
+              className="w-full"
+              size="sm"
+              title="Open Shape List (Ctrl+L)"
+            >
+              <span className="text-white">Shape List</span>
+            </Button>
+            <Button
+              color="primary"
+              variant="ghost"
+              onClick={() => setIsGlbModalOpen(true)}
+              startContent={<FileUp className="w-4 h-4" />}
+              className="w-full"
+              size="sm"
+              title="Import GLB Asset (Ctrl+G)"
+            >
+              <span className="text-white">Import GLB</span>
+            </Button>
+            <Button
+              color="primary"
+              variant="ghost"
+              onClick={() => setIsAssetListOpen(true)}
+              startContent={<Maximize2 className="w-4 h-4" />}
+              className="w-full"
+              size="sm"
+              title="View Imported Assets"
+            >
+              <span className="text-white">View Assets</span>
+            </Button>
+            <Button
+              color="primary"
+              variant="ghost"
+              onClick={() => {
+                loadPermanentMaps()
+                setIsPermanentMapsOpen(true)
+              }}
+              startContent={<Box className="w-4 h-4" />}
+              className="w-full"
+              size="sm"
+              title="View Permanent Maps for this game scene"
+            >
+              <span className="text-white">Game Scene Maps</span>
+            </Button>
+            <Button 
+              color="danger" 
+              variant="flat" 
+              startContent={<Trash2 className="w-4 h-4" />}
+              onClick={clearLocalStorage}
+              className="ml-2"
+            >
+              Clear Cache
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 pt-3 border-t border-gray-800/50 flex justify-between items-center">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-white">Selected: {selectedShapeId ? (placedShapes.find(s => s.id === selectedShapeId)?.type || 'None') : 'None'}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-white">Click to place • Drag to move • Shift+Drag to rotate</span>
+        </div>
+      </div>
+
+      {/* Shape List Panel */}
+      {isShapeListOpen && (
+        <div className="fixed right-4 top-4 w-96 bg-gray-900/95 rounded-lg shadow-xl backdrop-blur-sm border border-gray-800">
+          <div className="flex flex-col h-[80vh]">
+            {/* Header */}
+            <div className="p-4 border-b border-gray-800">
+              <div className="flex justify-between items-center">
+                <h3 className="text-white text-lg font-semibold">Shape Manager</h3>
+                <Button
+                  isIconOnly
+                  size="sm"
+                  variant="light"
+                  onClick={() => setIsShapeListOpen(false)}
+                >
+                  ×
+                </Button>
+              </div>
+              
+              {/* Group Creation */}
+              <div className="mt-4 flex gap-2">
+                {isCreatingGroup ? (
+                  <div className="flex gap-2 w-full">
+                    <Input
+                      size="sm"
+                      placeholder="Group name"
+                      value={groupName}
+                      onChange={(e) => setGroupName(e.target.value)}
+                      className="flex-grow"
+                      classNames={{
+                        input: "text-white"
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      color="primary"
+                      onClick={() => createGroup(groupName)}
+                    >
+                      <span className="text-white">Create</span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="flat"
+                      onClick={() => setIsCreatingGroup(false)}
+                    >
+                      <span className="text-white">Cancel</span>
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    size="sm"
+                    color="primary"
+                    variant="flat"
+                    onClick={() => setIsCreatingGroup(true)}
+                    className="w-full"
+                  >
+                    <span className="text-white">Create New Group</span>
+                  </Button>
+                )}
+              </div>
+              
+              {/* Recently Imported Shapes Lock Button */}
+              {recentlyImportedShapeIds.length > 0 && (
+                <div className="mt-4 p-3 bg-purple-500/10 rounded-lg border border-purple-500/30">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center">
+                      <Lock className="w-4 h-4 text-purple-400" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-medium text-white">Recently Imported</h4>
+                      <p className="text-xs text-white">{recentlyImportedShapeIds.length} shapes</p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    color="secondary"
+                    variant="flat"
+                    onClick={lockRecentlyImportedShapes}
+                    startContent={<Lock className="w-4 h-4" />}
+                    className="w-full mt-2"
+                  >
+                    <span className="text-white">Lock All Imported Shapes</span>
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Content Area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* Groups */}
+              {Object.entries(groups).map(([groupId, shapeIds]) => (
+                <div 
+                  key={groupId}
+                  className="border border-gray-800 rounded-lg overflow-hidden"
+                >
+                  <div 
+                    className="flex items-center justify-between bg-gray-800/50 p-2 cursor-pointer"
+                    onClick={() => setSelectedGroup(selectedGroup === groupId ? null : groupId)}
+                  >
+                    <span className="text-white font-medium">{groupId}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-white">
+                        {shapeIds.length} shape{shapeIds.length !== 1 ? 's' : ''}
+                      </span>
+                      <Button
+                        isIconOnly
+                        size="sm"
+                        variant="light"
+                        color="danger"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          deleteGroup(groupId)
+                        }}
+                      >
+                        ×
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  {selectedGroup === groupId && (
+                    <div className="p-2 space-y-2">
+                      {getGroupShapes(groupId).map((shape) => (
+                        <ShapeListItem
+                          key={shape.id}
+                          shape={shape}
+                          isSelected={selectedShapeId === shape.id}
+                          onSelect={() => setSelectedShapeId(shape.id)}
+                          onToggleCollision={() => toggleCollision(shape.id)}
+                          formatVector={formatVector}
+                          onRemoveFromGroup={() => removeFromGroup(groupId, shape.id)}
+                          availableGroups={Object.keys(groups)}
+                          onDelete={handleDeleteShape}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {/* Ungrouped Shapes */}
+              <div className="border border-gray-800 rounded-lg overflow-hidden">
+                <div className="bg-gray-800/50 p-2">
+                  <span className="text-white font-medium">Ungrouped Shapes</span>
+                </div>
+                <div className="p-2 space-y-2">
+                  {getUngroupedShapes().map((shape) => (
+                    <ShapeListItem
+                      key={shape.id}
+                      shape={shape}
+                      isSelected={selectedShapeId === shape.id}
+                      onSelect={() => setSelectedShapeId(shape.id)}
+                      onToggleCollision={() => toggleCollision(shape.id)}
+                      formatVector={formatVector}
+                      onAddToGroup={(groupId) => addToGroup(groupId, shape.id)}
+                      availableGroups={Object.keys(groups)}
+                      onDelete={handleDeleteShape}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Modal */}
+      <Modal isOpen={isExportModalOpen} onOpenChange={setIsExportModalOpen}>
+        <ModalContent>
+          <ModalHeader>Export Collision Map</ModalHeader>
+          <ModalBody>
+            <div className="flex flex-col gap-2">
+                  <Input
+                    label="Map Name"
+                placeholder="Enter a name for this map"
+                    value={groupName}
+                    onChange={(e) => setGroupName(e.target.value)}
+                  />
+                  <Textarea
+                    label="Description"
+                placeholder="Enter a description"
+                    value={groupDescription}
+                    onChange={(e) => setGroupDescription(e.target.value)}
+              />
+                  <Input
+                    label="Author"
+                placeholder="Your name"
+                    value={author}
+                    onChange={(e) => setAuthor(e.target.value)}
+              />
+                    <Textarea
+                      label="Notes"
+                placeholder="Any additional notes"
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+              />
+              <Input
+                label="Tags"
+                placeholder="Comma-separated tags"
+                value={tags}
+                onChange={(e) => setTags(e.target.value)}
+              />
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button color="danger" variant="light" onPress={() => setIsExportModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button color="primary" onPress={handleExport}>
+              Export
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Import Modal */}
+      <Modal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} size="md">
+        <ModalContent className="bg-gray-900 border border-gray-800">
+          <ModalHeader className="flex flex-col gap-1 border-b border-gray-800">
+            <h3 className="text-xl font-bold text-white">Import Collision Map</h3>
+            <p className="text-xs text-white">Import a collision map for the current game scene</p>
+          </ModalHeader>
+          <ModalBody className="py-4">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center">
+                  <FileUp className="w-6 h-6 text-blue-400" />
+                </div>
+                <div>
+                  <h4 className="text-base font-medium text-white">Select a collision map file</h4>
+                  <p className="text-sm text-white mt-2">
+                    Choose a JSON file containing collision map data. This will add collision shapes to your current game scene.
+                  </p>
+                </div>
+              </div>
+              
+              <div className="mt-2">
+              <input
+                type="file"
+                accept=".json"
+                onChange={handleImport}
+                  className="block w-full text-sm text-white
+                  file:mr-4 file:py-2 file:px-4
+                    file:rounded-full file:border-0
+                  file:text-sm file:font-semibold
+                    file:bg-blue-600 file:text-white
+                    hover:file:bg-blue-700"
+              />
+              </div>
+              
+              <div className="flex items-center space-x-2 mt-2">
+                <Switch
+                    isSelected={importAsPermanent}
+                    onValueChange={setImportAsPermanent}
+                  id="import-permanent-switch"
+                />
+                <label htmlFor="import-permanent-switch" className="text-white">
+                  Save as permanent map in this game scene
+                </label>
+              </div>
+              
+              <div className="mt-2 p-3 bg-gray-800/50 rounded-lg">
+                <p className="text-xs text-white">
+                  <strong>Note:</strong> Permanent maps are saved to the server and will be available in this game scene even after refreshing the page.
+                </p>
+              </div>
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button color="danger" variant="light" onPress={() => setIsImportModalOpen(false)}>
+              Cancel
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* GLB Import Modal */}
+      <Modal isOpen={isGlbModalOpen} onClose={() => setIsGlbModalOpen(false)} size="md">
+        <ModalContent className="bg-gray-900 border border-gray-800">
+          <ModalHeader className="flex flex-col gap-1 border-b border-gray-800">
+            <h3 className="text-xl font-bold text-white">Import GLB Asset</h3>
+            <p className="text-xs text-gray-400">Add 3D models to your scene</p>
+          </ModalHeader>
+          <ModalBody className="py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <Input
+                  label="Asset Name"
+                  placeholder="Enter a name for this asset"
+                  value={assetName}
+                  onChange={(e) => setAssetName(e.target.value)}
+                  description="Leave blank to use the filename"
+                  variant="bordered"
+                  classNames={{
+                    label: "text-gray-300",
+                    description: "text-gray-400",
+                    input: "bg-gray-800/50"
+                  }}
+                />
+              </div>
+              
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Select GLB File
+                </label>
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="file"
+                      accept=".glb"
+                      onChange={handleFileChange}
+                      className="block w-full text-sm text-gray-400
+                        file:mr-4 file:py-2 file:px-4
+                        file:rounded-md file:border-0
+                        file:text-sm file:font-semibold
+                        file:bg-primary-500 file:text-white
+                        hover:file:bg-primary-600
+                        cursor-pointer"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    Select a GLB file from your computer. Make sure to copy it to:<br />
+                    <code className="text-xs bg-gray-800 px-1 py-0.5 rounded">C:\Users\16303\Desktop\CURSOR\Pookie 3.0\public\models\</code>
+                  </p>
+                </div>
+              </div>
+              
+              <div className="col-span-2">
+                <Input
+                  label="Or Enter Model Name"
+                  placeholder="Enter model filename (e.g., penguin.glb)"
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  description="Enter the name of a model in your public/models directory"
+                  variant="bordered"
+                  classNames={{
+                    label: "text-gray-300",
+                    description: "text-gray-400",
+                    input: "bg-gray-800/50"
+                  }}
+                />
+              </div>
+              
+              <div className="col-span-2">
+                <div className="flex items-center gap-3 p-3 bg-gray-800/50 rounded-lg">
+                  <Switch
+                    size="sm"
+                    isSelected={usePlayerPosition}
+                    onValueChange={setUsePlayerPosition}
+                    color="primary"
+                  />
+                  <div>
+                    <label className="text-sm text-white">Place at Player Position</label>
+                    <p className="text-xs text-gray-400">
+                      {playerPosition ? 
+                        `Current position: [${playerPosition.x.toFixed(1)}, ${playerPosition.y.toFixed(1)}, ${playerPosition.z.toFixed(1)}]` : 
+                        'Player position not available'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              {!usePlayerPosition && (
+              <div className="col-span-2 grid grid-cols-3 gap-2">
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Position X</label>
+                  <Input
+                    type="number"
+                    size="sm"
+                    value={modelPosition[0].toString()}
+                    onChange={(e) => handlePositionChange('x', Number(e.target.value))}
+                    variant="bordered"
+                    className="bg-gray-800/50"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Position Y</label>
+                  <Input
+                    type="number"
+                    size="sm"
+                    value={modelPosition[1].toString()}
+                    onChange={(e) => handlePositionChange('y', Number(e.target.value))}
+                    variant="bordered"
+                    className="bg-gray-800/50"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Position Z</label>
+                  <Input
+                    type="number"
+                    size="sm"
+                    value={modelPosition[2].toString()}
+                    onChange={(e) => handlePositionChange('z', Number(e.target.value))}
+                    variant="bordered"
+                    className="bg-gray-800/50"
+                  />
+                </div>
+              </div>
+              )}
+              
+              <div className="col-span-2 grid grid-cols-3 gap-2">
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Rotation X</label>
+                  <Input
+                    type="number"
+                    size="sm"
+                    value={modelRotation[0].toString()}
+                    onChange={(e) => handleModelRotationChange('x', Number(e.target.value))}
+                    variant="bordered"
+                    className="bg-gray-800/50"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Rotation Y</label>
+                  <Input
+                    type="number"
+                    size="sm"
+                    value={modelRotation[1].toString()}
+                    onChange={(e) => handleModelRotationChange('y', Number(e.target.value))}
+                    variant="bordered"
+                    className="bg-gray-800/50"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Rotation Z</label>
+                  <Input
+                    type="number"
+                    size="sm"
+                    value={modelRotation[2].toString()}
+                    onChange={(e) => handleModelRotationChange('z', Number(e.target.value))}
+                    variant="bordered"
+                    className="bg-gray-800/50"
+                  />
+                </div>
+              </div>
+              
+              <div className="col-span-2">
+                <label className="text-xs text-gray-400 block mb-1">Scale</label>
+                <Input
+                  type="number"
+                  size="sm"
+                  min={0.1}
+                  step={0.1}
+                  value={modelScale.toString()}
+                  onChange={(e) => setModelScale(Number(e.target.value))}
+                  variant="bordered"
+                  className="bg-gray-800/50"
+                />
+              </div>
+              
+              <div className="col-span-1">
+                <div className="flex items-center gap-3 p-3 bg-gray-800/50 rounded-lg h-full">
+                  <Switch
+                    size="sm"
+                    isSelected={modelDebug}
+                    onValueChange={setModelDebug}
+                    color="secondary"
+                  />
+                  <div>
+                    <label className="text-sm text-white">Debug Mode</label>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="col-span-1">
+                <div className="flex items-center gap-3 p-3 bg-gray-800/50 rounded-lg h-full">
+                  <Switch
+                    size="sm"
+                    isSelected={isPermanentPlacement}
+                    onValueChange={setIsPermanentPlacement}
+                    color="primary"
+                  />
+                  <div>
+                    <label className="text-sm text-white">Permanent</label>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex justify-center mt-4">
+              <Button
+                color="primary"
+                onClick={handleGlbImport}
+                startContent={<FileUp className="w-4 h-4" />}
+                isDisabled={!selectedModel && !selectedFile}
+                className="px-8 font-medium"
+              >
+                Import Model
+              </Button>
+            </div>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+
+      {/* Lock Confirmation Dialog */}
+      <Modal isOpen={isLockConfirmOpen} onClose={() => setIsLockConfirmOpen(false)} size="md">
+        <ModalContent className="bg-gray-900 border border-gray-800">
+          <ModalHeader className="flex flex-col gap-1 border-b border-gray-800">
+            <h3 className="text-xl font-bold text-white">Lock Imported Shapes</h3>
+            <p className="text-xs text-white">Make your imported shapes permanent</p>
+          </ModalHeader>
+          <ModalBody className="py-6">
+            <div className="flex flex-col gap-6">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center">
+                  <Lock className="w-6 h-6 text-blue-400" />
+                </div>
+                <div>
+                  <h4 className="text-base font-medium text-white">Make shapes permanent?</h4>
+                  <p className="text-sm text-white mt-2">
+                    You've imported {recentlyImportedShapeIds.length} shapes. Would you like to make them permanent?
+                    Permanent shapes will persist between sessions and be available every time you load the game.
+                  </p>
+                  <p className="text-sm text-white mt-2">
+                    If you don't make them permanent now, they'll be lost when you refresh or close the page.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              color="default"
+              variant="flat"
+              onClick={() => setIsLockConfirmOpen(false)}
+            >
+              <span className="text-white">Keep Temporary</span>
+            </Button>
+            <Button
+              color="primary"
+              onClick={lockRecentlyImportedShapes}
+              startContent={<Lock className="w-4 h-4" />}
+            >
+              <span className="text-white">Make Permanent</span>
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Asset List Modal */}
+      <Modal isOpen={isAssetListOpen} onClose={() => setIsAssetListOpen(false)} size="lg">
+        <ModalContent className="bg-gray-900 border border-gray-800">
+          <ModalHeader className="flex flex-col gap-1 border-b border-gray-800">
+            <h3 className="text-xl font-bold text-white">Manage GLB Assets</h3>
+            <p className="text-xs text-gray-400">View and manage your imported 3D models</p>
+          </ModalHeader>
+          <ModalBody className="py-4">
+            {customAssets.length > 0 ? (
+              <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+                {customAssets.map(asset => (
+                  <div key={asset.id} className="flex justify-between items-center p-3 bg-gray-800/70 rounded-lg border border-gray-700 hover:border-gray-600 transition-colors">
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium text-white">{asset.name}</span>
+                      <span className="text-xs text-gray-400">{asset.url.split('/').pop()}</span>
+                      <div className="grid grid-cols-3 gap-2 mt-1">
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-blue-400">Position:</span>
+                          <span className="text-xs text-gray-400">
+                            [{asset.position?.[0]?.toFixed(1) || 0}, {asset.position?.[1]?.toFixed(1) || 0}, {asset.position?.[2]?.toFixed(1) || 0}]
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-yellow-400">Rotation:</span>
+                          <span className="text-xs text-gray-400">
+                            [{asset.rotation?.[0]?.toFixed(1) || 0}, {asset.rotation?.[1]?.toFixed(1) || 0}, {asset.rotation?.[2]?.toFixed(1) || 0}]
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-purple-400">Scale:</span>
+                          <span className="text-xs text-gray-400">
+                            {asset.scale?.toFixed(2) || 1}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2">
+                        <Button
+                          color="primary"
+                          size="sm"
+                          variant="flat"
+                          onClick={() => {
+                            // Create a simpler teleport event with just the position
+                            const event = new CustomEvent('teleportPlayer', {
+                              detail: {
+                                position: {
+                                  x: asset.position[0],
+                                  y: asset.position[1] + 5, // Add some height to avoid clipping
+                                  z: asset.position[2]
+                                }
+                              }
+                            });
+                            window.dispatchEvent(event);
+                            
+                            // Close the modal
+                            setIsAssetListOpen(false);
+                            
+                            // Show a message to the user
+                            console.log(`Teleporting to asset: ${asset.name} at position [${asset.position[0]}, ${asset.position[1]}, ${asset.position[2]}]`);
+                          }}
+                          title="Teleport to asset location"
+                        >
+                          <span className="text-xs">Relocate</span>
+                        </Button>
+                        
+                        <Button
+                          color={asset.isLocked ? "success" : "warning"}
+                          size="sm"
+                          variant="flat"
+                          onClick={() => {
+                            // Toggle lock state
+                            const updatedAsset = {
+                              ...asset,
+                              isLocked: !asset.isLocked
+                            };
+                            
+                            // Update in the UI
+                            setCustomAssets(prev => 
+                              prev.map(a => a.id === asset.id ? updatedAsset : a)
+                            );
+                            
+                            // Save to server
+                            fetch('/api/permanent-assets', {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                              },
+                              body: JSON.stringify({
+                                asset: updatedAsset
+                              })
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                              if (data.success) {
+                                console.log('Successfully toggled asset lock state:', data);
+                              } else {
+                                console.error('Failed to toggle asset lock state:', data);
+                              }
+                            })
+                            .catch(error => {
+                              console.error('Error toggling asset lock state:', error);
+                            });
+                          }}
+                          title={asset.isLocked ? "Unlock asset for editing" : "Lock asset to prevent editing"}
+                        >
+                          <span className="text-xs">{asset.isLocked ? "🔒 Locked" : "🔓 Unlock"}</span>
+                        </Button>
+                      </div>
+                      
+                      <Button
+                        color="danger"
+                        size="sm"
+                        variant="light"
+                        onClick={() => deleteAsset(asset.id)}
+                        title="Delete this asset"
+                      >
+                        <span className="text-xs">Delete</span>
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8">
+                <Box className="w-12 h-12 text-gray-500 mb-4" />
+                <p className="text-gray-400 text-center">No assets found</p>
+                <p className="text-gray-500 text-sm text-center mt-2">
+                  Import GLB assets using the Import GLB button
+                </p>
+                <Button
+                  color="primary"
+                  variant="flat"
+                  className="mt-4"
+                  onClick={() => {
+                    setIsAssetListOpen(false);
+                    setIsGlbModalOpen(true);
+                  }}
+                >
+                  Import GLB Model
+                </Button>
+              </div>
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              color="default"
+              variant="light"
+              onClick={() => setIsAssetListOpen(false)}
+            >
+              Close
+            </Button>
+            <Button
+              color="primary"
+              onClick={() => {
+                // Refresh the asset list
+                fetch('/api/permanent-assets')
+                  .then(response => response.json())
+                  .then(data => {
+                    if (data.assets && Array.isArray(data.assets)) {
+                      setCustomAssets(data.assets);
+                      console.log('Refreshed asset list:', data.assets);
+                    }
+                  })
+                  .catch(error => {
+                    console.error('Error refreshing asset list:', error);
+                  });
+              }}
+            >
+              Refresh
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Add Permanent Maps Modal */}
+      <Modal isOpen={isPermanentMapsOpen} onClose={() => setIsPermanentMapsOpen(false)} size="lg">
+        <ModalContent className="bg-gray-900 border border-gray-800">
+          <ModalHeader className="flex flex-col gap-1 border-b border-gray-800">
+            <h3 className="text-xl font-bold text-white">Permanent Collision Maps</h3>
+            <p className="text-xs text-white">Manage your saved collision maps for the current game scene</p>
+          </ModalHeader>
+          <ModalBody className="py-4">
+            {Object.keys(permanentMaps).length > 0 ? (
+              <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                {Object.entries(permanentMaps).map(([groupId, groupData]) => {
+                  // Ensure we have valid shape IDs
+                  const shapeIds: string[] = Array.isArray(groupData) ? groupData : 
+                    (groupData && typeof groupData === 'object' && 'shapes' in groupData && Array.isArray(groupData.shapes) ? 
+                      groupData.shapes : []);
+                  
+                  return (
+                  <div key={groupId} className="p-4 bg-gray-800/70 rounded-lg border border-gray-700 hover:border-gray-600 transition-colors">
+                    <div className="flex justify-between items-center">
+                      <div className="flex flex-col">
+                          {editingGroupId === groupId ? (
+                            <div className="flex items-center gap-2">
+                              <Input
+                                size="sm"
+                                placeholder="Enter new name"
+                                value={editedGroupName}
+                                onChange={(e) => setEditedGroupName(e.target.value)}
+                                autoFocus
+                                className="min-w-[200px]"
+                                classNames={{
+                                  input: "text-white"
+                                }}
+                              />
+                              <Button
+                                size="sm"
+                                color="primary"
+                                variant="flat"
+                                onClick={() => saveGroupName(groupId, editedGroupName)}
+                                isIconOnly
+                              >
+                                <Check className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                color="danger"
+                                variant="flat"
+                                onClick={() => setEditingGroupId(null)}
+                                isIconOnly
+                              >
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <span 
+                              className="text-base font-medium text-white cursor-pointer hover:text-blue-400"
+                              onClick={() => {
+                                setEditingGroupId(groupId)
+                                setEditedGroupName(groupId)
+                              }}
+                              title="Click to edit name"
+                            >
+                              {groupId}
+                            </span>
+                          )}
+                        <span className="text-sm text-white mt-1">{shapeIds.length} shapes</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          color="danger"
+                          variant="flat"
+                          onClick={() => {
+                            setMapToDelete(groupId)
+                            setIsDeleteMapConfirmOpen(true)
+                          }}
+                          startContent={<Trash2 className="w-4 h-4" />}
+                        >
+                          <span className="text-white">Delete</span>
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-3 p-3 bg-gray-900/50 rounded-lg">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center">
+                          <Box className="w-3 h-3 text-blue-400" />
+                        </div>
+                        <span className="text-sm text-white">Shape IDs</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                          {shapeIds.length > 0 ? shapeIds.map((id: string) => (
+                          <span key={id} className="text-xs px-2 py-1 bg-gray-800 rounded-full text-white">
+                            {id.substring(0, 8)}
+                          </span>
+                          )) : (
+                            <span className="text-xs text-gray-400">No shape IDs available</span>
+                          )}
+                      </div>
+                    </div>
+                  </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8">
+                <Box className="w-12 h-12 text-gray-500 mb-4" />
+                <p className="text-white text-center">No permanent maps found</p>
+                <p className="text-white text-sm text-center mt-2">
+                  Import collision maps and make them permanent to see them here.
+                  These maps will be available in the current game scene only.
+                </p>
+                <Button
+                  color="primary"
+                  variant="flat"
+                  onClick={() => {
+                    setIsPermanentMapsOpen(false)
+                    setIsImportModalOpen(true)
+                  }}
+                  className="mt-4"
+                >
+                  <span className="text-white">Import Map</span>
+                </Button>
+              </div>
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              color="default"
+              variant="flat"
+              onClick={() => setIsPermanentMapsOpen(false)}
+            >
+              <span className="text-white">Close</span>
+            </Button>
+            <Button
+              color="primary"
+              onClick={loadPermanentMaps}
+              startContent={<FileUp className="w-4 h-4" />}
+            >
+              <span className="text-white">Refresh</span>
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Delete Map Confirmation Dialog */}
+      <Modal isOpen={isDeleteMapConfirmOpen} onClose={() => setIsDeleteMapConfirmOpen(false)} size="sm">
+        <ModalContent className="bg-gray-900 border border-gray-800">
+          <ModalHeader className="flex flex-col gap-1 border-b border-gray-800">
+            <h3 className="text-xl font-bold text-white">Delete Permanent Map</h3>
+            <p className="text-xs text-white">This action cannot be undone</p>
+          </ModalHeader>
+          <ModalBody className="py-6">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
+                  <Trash2 className="w-6 h-6 text-red-400" />
+                </div>
+                <div>
+                  <h4 className="text-base font-medium text-white">Are you sure?</h4>
+                  <p className="text-sm text-white mt-2">
+                    You are about to delete the permanent map "{mapToDelete}". This will remove all shapes in this map from the scene and delete them permanently.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              color="default"
+              variant="flat"
+              onClick={() => setIsDeleteMapConfirmOpen(false)}
+            >
+              <span className="text-white">Cancel</span>
+            </Button>
+            <Button
+              color="danger"
+              onClick={() => mapToDelete && deletePermanentMap(mapToDelete)}
+              startContent={<Trash2 className="w-4 h-4" />}
+            >
+              <span className="text-white">Delete Permanently</span>
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Quick Place Modal */}
+      <Modal isOpen={isQuickPlaceModalOpen} onClose={() => setIsQuickPlaceModalOpen(false)} size="sm">
+        <ModalContent className="bg-gray-900 border border-gray-800">
+          <ModalHeader className="flex flex-col gap-1 border-b border-gray-800">
+            <h3 className="text-xl font-bold text-white">Quick Place Model</h3>
+            <p className="text-xs text-gray-400">Place a model at your current position</p>
+          </ModalHeader>
+          <ModalBody className="py-4">
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <Input
+                  label="Model Name"
+                  placeholder="Enter model filename (e.g., pier.glb)"
+                  value={quickPlaceModel}
+                  onChange={(e) => setQuickPlaceModel(e.target.value)}
+                  description="Enter the name of a model in your public/models directory"
+                  variant="bordered"
+                  classNames={{
+                    label: "text-gray-300",
+                    description: "text-gray-400",
+                    input: "bg-gray-800/50"
+                  }}
+                />
+              </div>
+              
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">Scale</label>
+                <Input
+                  type="number"
+                  size="sm"
+                  min={0.1}
+                  step={0.1}
+                  value={quickPlaceScale.toString()}
+                  onChange={(e) => setQuickPlaceScale(Number(e.target.value))}
+                  variant="bordered"
+                  className="bg-gray-800/50"
+                />
+              </div>
+              
+              <div className="bg-gray-800/50 p-3 rounded-lg">
+                <p className="text-sm text-white font-medium">Player Position</p>
+                <p className="text-xs text-gray-400">
+                  {playerPosition ? 
+                    `[${playerPosition.x.toFixed(1)}, ${playerPosition.y.toFixed(1)}, ${playerPosition.z.toFixed(1)}]` : 
+                    'Player position not available'}
+                </p>
+              </div>
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              color="default"
+              variant="light"
+              onClick={() => setIsQuickPlaceModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              color="primary"
+              onClick={handleQuickPlace}
+              isDisabled={!quickPlaceModel || !playerPosition}
+            >
+              Place Model
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+    </div>
+  )
+}
+
+// Shape List Item Component
+interface ShapeListItemProps {
+  shape: PlacedShape
+  isSelected: boolean
+  onSelect: () => void
+  onToggleCollision: () => void
+  formatVector: (v: THREE.Vector3 | THREE.Euler) => string
+  onAddToGroup?: (groupId: string) => void
+  onRemoveFromGroup?: () => void
+  availableGroups?: string[]
+  onDelete: (id: string) => void
+}
+
+function ShapeListItem({
+  shape,
+  isSelected,
+  onSelect,
+  onToggleCollision,
+  formatVector,
+  onAddToGroup,
+  onRemoveFromGroup,
+  availableGroups = [],
+  onDelete
+}: ShapeListItemProps) {
+  const [isGroupMenuOpen, setIsGroupMenuOpen] = useState(false)
+  const { recentlyImportedShapeIds } = useCollisionShape()
+  const isRecentlyImported = recentlyImportedShapeIds?.includes(shape.id)
+
+  // Get status badge color based on collision and lock state
+  const getStatusColor = () => {
+    if (shape.isLocked) return 'bg-blue-500'
+    return shape.hasCollision ? 'bg-green-500' : 'bg-red-500'
+  }
+
+  // Get status text
+  const getStatusText = () => {
+    if (shape.isLocked) return 'Locked'
+    return shape.hasCollision ? 'Collision ON' : 'Collision OFF'
+  }
+
+  // Get type icon based on shape type
+  const getTypeIcon = () => {
+    switch (shape.type) {
+      case 'box':
+        return <Box className="w-4 h-4 text-white" />
+      case 'sphere':
+        return <Circle className="w-4 h-4 text-white" />
+      case 'capsule':
+        return <CapsuleIcon className="w-4 h-4 text-white" />
+      default:
+        return null
+    }
+  }
+
+  return (
+    <div
+      className={`p-3 rounded-lg transition-colors ${
+        isSelected ? 'bg-primary-500/20' : 'bg-gray-800/30'
+      } hover:bg-primary-500/10 ${isRecentlyImported ? 'border border-purple-500/50' : ''}`}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {getTypeIcon()}
+          <span className="text-sm text-white font-medium">{shape.name || `Shape ${shape.id.substring(0, 4)}`}</span>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          {/* Collision Status Badge */}
+          <div 
+            className={`px-2 py-0.5 rounded text-xs font-medium text-white flex items-center gap-1 ${getStatusColor()}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleCollision();
+            }}
+            title={`Click to toggle collision (currently ${shape.hasCollision ? 'ON' : 'OFF'})`}
+          >
+            {shape.hasCollision ? (
+              <Shield size={12} className="text-white" />
+            ) : (
+              <ShieldOff size={12} className="text-white" />
+            )}
+            <span>{getStatusText()}</span>
+          </div>
+        </div>
+      </div>
+      
+      {/* Additional shape info */}
+      <div className="mt-2 text-xs text-gray-400">
+        <div className="flex flex-col gap-1">
+          <span>Position: {formatVector(shape.position)}</span>
+          <span>Scale: {formatVector(shape.scale)}</span>
+          <span>Rotation: {formatVector(shape.rotation)}</span>
+        </div>
+      </div>
+      
+      {/* Actions */}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button 
+          size="sm" 
+          color="primary" 
+          variant="flat"
+          onClick={onSelect}
+          className="flex-1"
+        >
+          Select
+        </Button>
+        
+        <Button 
+          size="sm" 
+          color={shape.hasCollision ? "success" : "danger"} 
+          variant="flat"
+          onClick={onToggleCollision}
+          className="flex-1"
+        >
+          {shape.hasCollision ? "Collision ON" : "Collision OFF"}
+        </Button>
+        
+        <Button
+          size="sm"
+          color="danger"
+          variant="light"
+          onClick={() => onDelete(shape.id)}
+          className="flex-1"
+        >
+          Delete
+        </Button>
+      </div>
+    </div>
+  )
+} 

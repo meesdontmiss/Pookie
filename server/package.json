@@ -1,0 +1,18 @@
+{
+  "name": "pookie-game-server",
+  "version": "1.0.0",
+  "description": "Game server for Pookie with WebRTC signaling and WebSocket support",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.8.1",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3"
+  }
+} 

@@ -1,0 +1,47 @@
+## Pookie Game Loading Spinner Instructions
+
+### About the Loading Spinner
+The LoadingSpinner component has been added to make loading states more enjoyable for players. It displays a spinning GIF animation with an optional text message.
+
+### How to Use Your Own Loading GIF
+1. Place your loading animation GIF in: `public/images/pookie-loader.gif`
+2. The file should be named `pookie-loader.gif` or update the `loaderSrc` property in the LoadingSpinner component.
+
+### Customization Options
+The LoadingSpinner component accepts the following props:
+
+- `message`: The text to display under the spinner (default: "Loading...")
+- `isVisible`: Whether the spinner is visible (default: true)
+- `loaderSrc`: Path to your loading GIF (default: "/images/pookie-loader.gif")
+- `size`: Size of the spinner in pixels (default: 120)
+- `fullScreen`: Whether the spinner should cover the entire screen (default: false)
+- `overlay`: Whether to show a dark overlay behind the spinner (default: true)
+
+### Example Usage
+```tsx
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+
+// Basic usage
+<LoadingSpinner />
+
+// Custom message and size
+<LoadingSpinner 
+  message="Loading awesome stuff..." 
+  size={150} 
+/>
+
+// Full screen with custom loader
+<LoadingSpinner 
+  message="Entering the game..." 
+  fullScreen={true}
+  loaderSrc="/images/custom-loader.gif" 
+/>
+```
+
+### Recommended GIF Specifications
+- Format: Animated GIF
+- Size: 200x200 pixels (or larger)
+- Background: Transparent
+- Animation: Looping
+
+The spinner is already integrated with the aircraft portal to show a loading state when entering the dogfight minigame. Enjoy! 

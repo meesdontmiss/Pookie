@@ -1,0 +1,46 @@
+'use client';
+
+import React from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
+import RoyaleGameScene from '@/components/plug-penguin/minigames/pookie-sumo-royale/royale-game-scene';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { useGuestIdentity } from '@/hooks/use-guest-identity';
+
+// This page renders the actual game scene for a given game ID.
+export default function GamePage() {
+  const params = useParams();
+  const searchParams = useSearchParams(); // To potentially get isPractice if passed in query
+  const { publicKey } = useWallet();
+  const guestId = useGuestIdentity();
+
+  const gameId = params.gameId as string;
+  // Attempt to get isPractice from query params, if NewLobbyRoom passes it.
+  // Otherwise, RoyaleGameScene might need a way to fetch/determine this if critical.
+  const isPractice = searchParams.get('practice') === 'true'; 
+
+  if (!gameId) {
+    return (
+      <div style={{ padding: '20px', color: 'red', textAlign: 'center' }}>
+        <h1>Error: Game ID is missing.</h1>
+        <p>Cannot load the game without a valid Game ID.</p>
+      </div>
+    );
+  }
+
+  // Allow guests when practice=true
+  if (!publicKey && !isPractice) {
+    return (
+      <div style={{ padding: '20px', color: 'orange', textAlign: 'center' }}>
+        <h1>Wallet Not Connected</h1>
+        <p>Please connect your wallet to join ranked matches.</p>
+      </div>
+    );
+  }
+
+  // Pass lobbyId (as gameId) and potentially isPractice to the game scene.
+  // RoyaleGameScene will be responsible for connecting to the game server (if different from lobby server)
+  // and handling game state.
+  return (
+    <RoyaleGameScene lobbyId={gameId} isPractice={isPractice} />
+  );
+} 

@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <defs>
+    <radialGradient id="snowGradient" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+      <stop offset="0%" stop-color="white" stop-opacity="1" />
+      <stop offset="70%" stop-color="white" stop-opacity="0.7" />
+      <stop offset="100%" stop-color="white" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  
+  <!-- Base circle with gradient -->
+  <circle cx="32" cy="32" r="24" fill="url(#snowGradient)" />
+  
+  <!-- Snowflake arms -->
+  <g stroke="white" stroke-width="2" stroke-linecap="round">
+    <!-- Vertical line -->
+    <line x1="32" y1="8" x2="32" y2="56" />
+    
+    <!-- Horizontal line -->
+    <line x1="8" y1="32" x2="56" y2="32" />
+    
+    <!-- Diagonal lines -->
+    <line x1="16" y1="16" x2="48" y2="48" />
+    <line x1="16" y1="48" x2="48" y2="16" />
+    
+    <!-- Small details on arms -->
+    <line x1="32" y1="16" x2="36" y2="20" />
+    <line x1="32" y1="16" x2="28" y2="20" />
+    
+    <line x1="32" y1="48" x2="36" y2="44" />
+    <line x1="32" y1="48" x2="28" y2="44" />
+    
+    <line x1="16" y1="32" x2="20" y2="36" />
+    <line x1="16" y1="32" x2="20" y2="28" />
+    
+    <line x1="48" y1="32" x2="44" y2="36" />
+    <line x1="48" y1="32" x2="44" y2="28" />
+  </g>
+</svg> 

@@ -1,0 +1,144 @@
+{
+  "shapes": {
+    "ot8jdgngub": {
+      "id": "ot8jdgngub",
+      "type": "capsule",
+      "position": {
+        "x": 30,
+        "y": 0,
+        "z": -40
+      },
+      "scale": {
+        "x": 71.1,
+        "y": 66.1,
+        "z": 71.1
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "hasCollision": true
+    },
+    "g0n9h77fdt4": {
+      "id": "g0n9h77fdt4",
+      "type": "box",
+      "position": {
+        "x": 30,
+        "y": 0,
+        "z": -40
+      },
+      "scale": {
+        "x": 33.2,
+        "y": 62.2,
+        "z": 31.1
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "hasCollision": true
+    },
+    "3gsysszyxif": {
+      "id": "3gsysszyxif",
+      "type": "box",
+      "position": {
+        "x": 30,
+        "y": 0,
+        "z": -40
+      },
+      "scale": {
+        "x": 38.2,
+        "y": 62.2,
+        "z": 31.1
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "hasCollision": true
+    },
+    "8npc3bwyb8a": {
+      "id": "8npc3bwyb8a",
+      "type": "sphere",
+      "position": {
+        "x": 30,
+        "y": 0,
+        "z": -40
+      },
+      "scale": {
+        "x": 22.6,
+        "y": 22.6,
+        "z": 22.6
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "hasCollision": true
+    },
+    "j2vijvu4ux": {
+      "id": "j2vijvu4ux",
+      "type": "box",
+      "position": {
+        "x": 30,
+        "y": 0,
+        "z": -40
+      },
+      "scale": {
+        "x": 17.2,
+        "y": 62.2,
+        "z": 54.1
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "hasCollision": true
+    },
+    "aoqukz96r5t": {
+      "id": "aoqukz96r5t",
+      "type": "box",
+      "position": {
+        "x": 30,
+        "y": 0,
+        "z": -40
+      },
+      "scale": {
+        "x": 17.2,
+        "y": 62.2,
+        "z": 54.1
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "hasCollision": true
+    },
+    "tamz2jfww": {
+      "id": "tamz2jfww",
+      "type": "box",
+      "position": {
+        "x": 87.1,
+        "y": -2.4,
+        "z": 62.3
+      },
+      "scale": {
+        "x": 4.5,
+        "y": 6,
+        "z": 26.7
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0 
+      },
+      "hasCollision": true
+    }
+  }
+}

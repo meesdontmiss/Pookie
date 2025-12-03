@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Clear Collision Shape Cache</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background-color: #f0f0f0;
+    }
+    .container {
+      text-align: center;
+      padding: 2rem;
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      max-width: 500px;
+    }
+    button {
+      background-color: #ff4d4f;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin-top: 20px;
+    }
+    button:hover {
+      background-color: #ff7875;
+    }
+    .success {
+      color: green;
+      margin-top: 20px;
+      display: none;
+    }
+    .items-cleared {
+      margin-top: 20px;
+      text-align: left;
+      background-color: #f9f9f9;
+      padding: 10px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Clear Collision Shape Cache</h1>
+    <p>This tool will clear all localStorage items related to collision shapes to fix issues with duplicate shapes.</p>
+    <div id="itemsCleared" class="items-cleared"></div>
+    <button id="clearButton">Clear All Cache</button>
+    <p id="successMessage" class="success">Cache cleared successfully! You can now close this page and refresh the application.</p>
+  </div>
+
+  <script>
+    // Function to clear all localStorage items
+    function clearAllCache() {
+      try {
+        const itemsCleared = [];
+        
+        // List of keys to clear
+        const keysToCheck = [
+          'collision-shape-editor',
+          'has-server-shapes',
+          'localChatMessages',
+          'walletAddress',
+          'isNFTHolder',
+          'isTokenHolder',
+          'sensitivity-settings',
+          'custom-glb-assets',
+          'collisionMaps'
+        ];
+        
+        // Check and clear each key
+        keysToCheck.forEach(key => {
+          if (localStorage.getItem(key) !== null) {
+            localStorage.removeItem(key);
+            itemsCleared.push(`✓ Cleared: ${key}`);
+          } else {
+            itemsCleared.push(`○ Not found: ${key}`);
+          }
+        });
+        
+        // Check for any other keys that might contain "collision", "shape", or "map"
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.includes('collision') || key.includes('shape') || key.includes('map'))) {
+            localStorage.removeItem(key);
+            itemsCleared.push(`✓ Cleared additional: ${key}`);
+          }
+        }
+        
+        // Display the cleared items
+        document.getElementById('itemsCleared').innerHTML = itemsCleared.join('<br>');
+        
+        // Show success message
+        document.getElementById('successMessage').style.display = 'block';
+        document.getElementById('clearButton').textContent = 'Clear Again';
+        
+        console.log('Cleared all collision shape cache from localStorage');
+        return itemsCleared;
+      } catch (error) {
+        console.error('Error clearing localStorage:', error);
+        alert('Error clearing cache: ' + error.message);
+        return [];
+      }
+    }
+    
+    // Add click event listener to the clear button
+    document.getElementById('clearButton').addEventListener('click', clearAllCache);
+    
+    // Auto-clear on page load
+    window.addEventListener('load', clearAllCache);
+  </script>
+</body>
+</html> 

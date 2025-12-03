@@ -1,0 +1,238 @@
+import React, { useRef, useState, useEffect } from 'react'
+import { useFrame } from '@react-three/fiber'
+import { Text } from '@react-three/drei'
+import * as THREE from 'three'
+import { useRouter } from 'next/navigation'
+
+// Portal effect with glowing ball
+const PookyballEffect = ({ position, scale = 1 }: { position: [number, number, number], scale?: number }) => {
+  const ballRef = useRef<THREE.Mesh>(null)
+  const ringRef = useRef<THREE.Mesh>(null)
+  const glowRef = useRef<THREE.Mesh>(null)
+  const particlesRef = useRef<THREE.Points>(null)
+  
+  // Animate the portal effect
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime()
+    
+    // Rotate the ball
+    if (ballRef.current) {
+      ballRef.current.rotation.y = t * 0.5
+      ballRef.current.rotation.z = t * 0.2
+      // Pulsing scale effect
+      const pulse = Math.sin(t * 2) * 0.05 + 1
+      ballRef.current.scale.set(pulse, pulse, pulse)
+    }
+    
+    // Rotate the ring
+    if (ringRef.current) {
+      ringRef.current.rotation.z = t * 0.3
+      ringRef.current.rotation.x = Math.sin(t * 0.4) * 0.2
+    }
+    
+    // Pulse the glow
+    if (glowRef.current) {
+      const glowPulse = Math.sin(t * 1.5) * 0.15 + 1.1
+      glowRef.current.scale.set(glowPulse, glowPulse, glowPulse)
+      glowRef.current.material.opacity = Math.sin(t * 1.2) * 0.2 + 0.7
+    }
+    
+    // Animate particles
+    if (particlesRef.current && particlesRef.current.geometry) {
+      const positions = particlesRef.current.geometry.attributes.position
+      
+      for (let i = 0; i < positions.count; i++) {
+        const i3 = i * 3
+        const y = positions.getY(i)
+        
+        // Move particles upward and reset when they go too high
+        positions.setY(i, y + 0.02)
+        
+        if (positions.getY(i) > 3) {
+          positions.setY(i, -3)
+          positions.setX(i, (Math.random() - 0.5) * 2)
+          positions.setZ(i, (Math.random() - 0.5) * 2)
+        }
+      }
+      
+      positions.needsUpdate = true
+    }
+  })
+  
+  // Create particle geometry
+  const createParticles = () => {
+    const particleCount = 100
+    const positions = new Float32Array(particleCount * 3)
+    
+    for (let i = 0; i < particleCount; i++) {
+      const i3 = i * 3
+      positions[i3] = (Math.random() - 0.5) * 2
+      positions[i3 + 1] = (Math.random() - 0.5) * 6 - 3
+      positions[i3 + 2] = (Math.random() - 0.5) * 2
+    }
+    
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    
+    return geometry
+  }
+  
+  return (
+    <group position={position} scale={scale}>
+      {/* Main soccer/football/pookyball sphere */}
+      <mesh ref={ballRef} castShadow>
+        <sphereGeometry args={[1, 32, 32]} />
+        <meshStandardMaterial color="#ffffff" roughness={0.2} metalness={0.3} />
+        
+        {/* Soccer/football pattern - black pentagons */}
+        {Array.from({ length: 12 }).map((_, i) => (
+          <mesh key={i} position={[
+            Math.sin(i / 12 * Math.PI * 2) * 1.01,
+            Math.cos(i / 12 * Math.PI * 2) * 1.01,
+            0
+          ]}>
+            <circleGeometry args={[0.25, 5]} />
+            <meshStandardMaterial color="#000000" side={THREE.DoubleSide} />
+          </mesh>
+        ))}
+      </mesh>
+      
+      {/* Glowing ring */}
+      <mesh ref={ringRef} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[1.8, 0.15, 16, 100]} />
+        <meshStandardMaterial color="#4fc3f7" emissive="#4fc3f7" emissiveIntensity={2} transparent opacity={0.7} />
+      </mesh>
+      
+      {/* Inner glow sphere */}
+      <mesh ref={glowRef}>
+        <sphereGeometry args={[1.2, 32, 32]} />
+        <meshBasicMaterial color="#4fc3f7" transparent opacity={0.3} />
+      </mesh>
+      
+      {/* Particles */}
+      <points ref={particlesRef} geometry={createParticles()}>
+        <pointsMaterial 
+          color="#4fc3f7" 
+          size={0.1} 
+          transparent 
+          opacity={0.6}
+          sizeAttenuation={true}
+        />
+      </points>
+      
+      {/* Portal light */}
+      <pointLight position={[0, 0, 0]} intensity={1.5} color="#4fc3f7" distance={8} decay={2} />
+    </group>
+  )
+}
+
+// Main component for the Super Pookyball entrance
+export default function SuperPookyballEntrance({ 
+  position = [0, 0, 0]
+}: { 
+  position?: [number, number, number]
+}) {
+  const [isHovered, setIsHovered] = useState(false)
+  const [isActive, setIsActive] = useState(true)
+  const platformRef = useRef<THREE.Group>(null)
+  const router = useRouter()
+  
+  // Hover effect
+  const handlePointerOver = () => setIsHovered(true)
+  const handlePointerOut = () => setIsHovered(false)
+  
+  // Click handler
+  const handleClick = () => {
+    // Emit enterMinigame event
+    const event = new CustomEvent('enterMinigame', {
+      detail: {
+        type: 'superPookyball',
+        position: position
+      }
+    })
+    window.dispatchEvent(event)
+    
+    // Navigate to the Super Pookyball game page
+    router.push('/superpookyball')
+  }
+  
+  // Floating animation for the platform
+  useFrame(({ clock }) => {
+    if (platformRef.current) {
+      const t = clock.getElapsedTime()
+      platformRef.current.position.y = Math.sin(t * 0.5) * 0.2 + position[1]
+      platformRef.current.rotation.y += 0.001
+    }
+  })
+  
+  return (
+    <group>
+      {/* Floating platform */}
+      <group 
+        ref={platformRef} 
+        position={position}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+        onClick={isActive ? handleClick : undefined}
+      >
+        {/* Platform base */}
+        <mesh receiveShadow castShadow position={[0, 0, 0]}>
+          <cylinderGeometry args={[3, 3.5, 0.5, 32]} />
+          <meshStandardMaterial 
+            color={isHovered ? "#64b5f6" : "#1976d2"} 
+            roughness={0.4} 
+            metalness={0.6}
+            emissive={isHovered ? "#64b5f6" : "#1976d2"}
+            emissiveIntensity={isHovered ? 0.5 : 0.2}
+          />
+        </mesh>
+        
+        {/* Edge accent light */}
+        <mesh position={[0, 0.25, 0]}>
+          <torusGeometry args={[3, 0.1, 16, 100]} />
+          <meshStandardMaterial 
+            color="#4fc3f7" 
+            emissive="#4fc3f7" 
+            emissiveIntensity={isHovered ? 2 : 1} 
+            transparent 
+            opacity={0.7}
+          />
+        </mesh>
+        
+        {/* Portal effect in the center */}
+        <PookyballEffect position={[0, 1.5, 0]} scale={0.8} />
+        
+        {/* Text sign */}
+        <Text
+          position={[0, -1, 0]}
+          rotation={[0, 0, 0]}
+          fontSize={0.6}
+          color="white"
+          font="/fonts/Heavitas.ttf"
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.05}
+          outlineColor="#1565c0"
+        >
+          SUPER POOKYBALL
+        </Text>
+        
+        {/* Descriptive text */}
+        <Text
+          position={[0, -1.6, 0]}
+          rotation={[0, 0, 0]}
+          fontSize={0.35}
+          color="#e3f2fd"
+          font="/fonts/Heavitas.ttf"
+          anchorX="center"
+          anchorY="middle"
+        >
+          {isHovered ? "CLICK TO PLAY!" : "SOCCER MINIGAME"}
+        </Text>
+      </group>
+      
+      {/* Platform ambient light */}
+      <pointLight position={[position[0], position[1] + 1, position[2]]} intensity={0.8} distance={10} decay={2} color="#4fc3f7" />
+    </group>
+  )
+} 

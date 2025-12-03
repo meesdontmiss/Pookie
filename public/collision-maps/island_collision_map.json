@@ -1,0 +1,17 @@
+{
+  "name": "Island Collision Map",
+  "assetPath": "/models/island.glb",
+  "position": [0, 0, 0],
+  "rotation": [0, 0, 0],
+  "scale": [1, 1, 1],
+  "shapes": [
+    {
+      "id": "shape_island_1",
+      "type": "box",
+      "position": [0, 0, 0],
+      "rotation": [0, 0, 0],
+      "scale": [50, 1, 50],
+      "isBlocking": true
+    }
+  ]
+} 

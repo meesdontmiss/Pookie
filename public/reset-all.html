@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Reset All Collision Data</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background-color: #f0f0f0;
+    }
+    .container {
+      text-align: center;
+      padding: 2rem;
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      max-width: 600px;
+    }
+    .button-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    button {
+      background-color: #ff4d4f;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    button:hover {
+      background-color: #ff7875;
+    }
+    button.secondary {
+      background-color: #1677ff;
+    }
+    button.secondary:hover {
+      background-color: #4096ff;
+    }
+    .success {
+      color: green;
+      margin-top: 20px;
+      display: none;
+    }
+    .log {
+      margin-top: 20px;
+      text-align: left;
+      background-color: #f9f9f9;
+      padding: 10px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 14px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .warning {
+      color: #ff4d4f;
+      font-weight: bold;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Reset All Collision Data</h1>
+    <p class="warning">WARNING: This will delete all collision shapes and groups!</p>
+    <p>Use these tools to completely reset all collision shape data and fix issues with duplicate shapes.</p>
+    
+    <div class="button-group">
+      <button id="clearLocalStorageBtn" class="secondary">1. Clear Browser Cache (localStorage)</button>
+      <button id="resetShapesBtn">2. Reset Permanent Shapes File</button>
+      <button id="resetGroupsBtn">3. Reset Permanent Groups File</button>
+      <button id="resetAllBtn">Reset Everything (All Steps)</button>
+    </div>
+    
+    <div id="log" class="log"></div>
+    <p id="successMessage" class="success">Reset completed successfully! You can now close this page and refresh the application.</p>
+  </div>
+
+  <script>
+    // Function to log messages
+    function log(message) {
+      const logElement = document.getElementById('log');
+      const timestamp = new Date().toLocaleTimeString();
+      logElement.innerHTML += `[${timestamp}] ${message}<br>`;
+      logElement.scrollTop = logElement.scrollHeight;
+      console.log(message);
+    }
+    
+    // Function to clear localStorage
+    function clearLocalStorage() {
+      try {
+        const itemsCleared = [];
+        
+        // List of keys to clear
+        const keysToCheck = [
+          'collision-shape-editor',
+          'has-server-shapes',
+          'localChatMessages',
+          'walletAddress',
+          'isNFTHolder',
+          'isTokenHolder',
+          'sensitivity-settings',
+          'custom-glb-assets',
+          'collisionMaps'
+        ];
+        
+        // Check and clear each key
+        keysToCheck.forEach(key => {
+          if (localStorage.getItem(key) !== null) {
+            localStorage.removeItem(key);
+            itemsCleared.push(`✓ Cleared: ${key}`);
+          }
+        });
+        
+        // Check for any other keys that might contain "collision", "shape", or "map"
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.includes('collision') || key.includes('shape') || key.includes('map'))) {
+            localStorage.removeItem(key);
+            itemsCleared.push(`✓ Cleared additional: ${key}`);
+          }
+        }
+        
+        log(`Cleared localStorage: ${itemsCleared.length} items removed`);
+        return true;
+      } catch (error) {
+        log(`Error clearing localStorage: ${error.message}`);
+        return false;
+      }
+    }
+    
+    // Function to reset permanent shapes file
+    async function resetShapesFile() {
+      try {
+        const response = await fetch('/api/permanent-shapes', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ shapes: [] })
+        });
+        
+        if (response.ok) {
+          log('Reset permanent shapes file successfully');
+          return true;
+        } else {
+          const errorText = await response.text();
+          log(`Failed to reset shapes file: ${errorText}`);
+          return false;
+        }
+      } catch (error) {
+        log(`Error resetting shapes file: ${error.message}`);
+        return false;
+      }
+    }
+    
+    // Function to reset permanent groups file
+    async function resetGroupsFile() {
+      try {
+        const response = await fetch('/api/permanent-groups', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ groups: {} })
+        });
+        
+        if (response.ok) {
+          log('Reset permanent groups file successfully');
+          return true;
+        } else {
+          const errorText = await response.text();
+          log(`Failed to reset groups file: ${errorText}`);
+          return false;
+        }
+      } catch (error) {
+        log(`Error resetting groups file: ${error.message}`);
+        return false;
+      }
+    }
+    
+    // Function to reset everything
+    async function resetAll() {
+      log('Starting complete reset...');
+      
+      const localStorageSuccess = clearLocalStorage();
+      if (!localStorageSuccess) {
+        log('Warning: Failed to clear localStorage');
+      }
+      
+      const shapesSuccess = await resetShapesFile();
+      if (!shapesSuccess) {
+        log('Warning: Failed to reset shapes file');
+      }
+      
+      const groupsSuccess = await resetGroupsFile();
+      if (!groupsSuccess) {
+        log('Warning: Failed to reset groups file');
+      }
+      
+      if (localStorageSuccess && shapesSuccess && groupsSuccess) {
+        log('Complete reset successful!');
+        document.getElementById('successMessage').style.display = 'block';
+      } else {
+        log('Reset completed with some warnings. Check the log for details.');
+      }
+    }
+    
+    // Add event listeners to buttons
+    document.getElementById('clearLocalStorageBtn').addEventListener('click', clearLocalStorage);
+    document.getElementById('resetShapesBtn').addEventListener('click', resetShapesFile);
+    document.getElementById('resetGroupsBtn').addEventListener('click', resetGroupsFile);
+    document.getElementById('resetAllBtn').addEventListener('click', resetAll);
+    
+    // Log initial message
+    log('Ready to reset collision data. Click a button to start.');
+  </script>
+</body>
+</html> 

@@ -1,0 +1,871 @@
+'use client'
+
+import { useEffect, useState, useRef, useMemo } from 'react'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { 
+  PerspectiveCamera, 
+  Environment, 
+  Sky, 
+  Stars,
+  Preload,
+  AdaptiveDpr,
+  PerformanceMonitor,
+  useTexture,
+  Text,
+  Html,
+  GradientTexture,
+  useGLTF,
+  useAnimations,
+  OrbitControls,
+  Cloud,
+  useHelper,
+  Billboard
+} from '@react-three/drei'
+import * as THREE from 'three'
+import { Player } from '../entities/player'
+import { Igloo } from '../entities/igloo'
+import { WinterChat } from '../ui/winter-chat'
+import { MiniMap } from '../ui/mini-map'
+import { ControlsPanel } from '../ui/controls-panel'
+import { DiscoBall, FlickeringLight } from '../entities/disco-effects'
+
+interface GameSceneProps {
+  onLoadComplete?: () => void
+}
+
+// Custom Snowfall component that follows the player
+function Snowfall({ 
+  count = 1500, 
+  size = 0.08, 
+  area = 100, 
+  playerPosition 
+}: { 
+  count?: number; 
+  size?: number; 
+  area?: number; 
+  playerPosition: THREE.Vector3 | null;
+}) {
+  const mesh = useRef<THREE.InstancedMesh>(null)
+  const { camera } = useThree()
+  
+  const [positions] = useState(() => {
+    const positions = []
+    for (let i = 0; i < count; i++) {
+      // Create a uniform distribution in a sphere around the origin
+      const radius = Math.sqrt(Math.random()) * (area / 2)
+      const theta = Math.random() * Math.PI * 2
+      const phi = Math.acos(2 * Math.random() - 1)
+      
+      positions.push({
+        x: radius * Math.sin(phi) * Math.cos(theta),
+        y: Math.random() * 40 - 10, // Height range from -10 to 30
+        z: radius * Math.sin(phi) * Math.sin(theta),
+        velocity: Math.random() * 0.12 + 0.04, // Varied velocities
+        size: Math.random() * 0.7 + 0.6, // Varied sizes
+        rotation: Math.random() * Math.PI, // Random rotation
+        offset: Math.random() * Math.PI * 2 // Random offset for swaying
+      })
+    }
+    return positions
+  })
+
+  useFrame((state) => {
+    if (!mesh.current || !playerPosition) return
+    
+    const time = state.clock.getElapsedTime()
+    const tempObject = new THREE.Object3D()
+    
+    // Get camera direction to create a view frustum for the snowfall
+    const cameraDirection = new THREE.Vector3()
+    camera.getWorldDirection(cameraDirection)
+    
+    // Create a box in front of the camera for snowfall
+    const cameraBox = {
+      min: new THREE.Vector3(
+        playerPosition.x - area/2,
+        playerPosition.y - 10,
+        playerPosition.z - area/2
+      ),
+      max: new THREE.Vector3(
+        playerPosition.x + area/2,
+        playerPosition.y + 40,
+        playerPosition.z + area/2
+      )
+    }
+    
+    positions.forEach((particle, i) => {
+      // Update y position for falling effect
+      particle.y -= particle.velocity
+      
+      // Calculate world position
+      const worldX = playerPosition.x + particle.x
+      const worldY = particle.y
+      const worldZ = playerPosition.z + particle.z
+      
+      // Reset position when snowflake reaches the ground or goes out of bounds
+      if (
+        particle.y < -10 || 
+        worldX < cameraBox.min.x || 
+        worldX > cameraBox.max.x || 
+        worldZ < cameraBox.min.z || 
+        worldZ > cameraBox.max.z
+      ) {
+        // Reset height
+        particle.y = 40
+        
+        // Create a new position in a cylinder above the player
+        const resetRadius = Math.sqrt(Math.random()) * (area / 2)
+        const resetTheta = Math.random() * Math.PI * 2
+        
+        // Position relative to player with slight forward bias in camera direction
+        particle.x = resetRadius * Math.cos(resetTheta) + cameraDirection.x * 10
+        particle.z = resetRadius * Math.sin(resetTheta) + cameraDirection.z * 10
+      }
+      
+      // Set position relative to player
+      tempObject.position.set(
+        playerPosition.x + particle.x, 
+        particle.y, 
+        playerPosition.z + particle.z
+      )
+      
+      // Add gentle rotation and swaying in all directions
+      tempObject.rotation.set(0, particle.rotation + time * 0.1, 0)
+      
+      // Apply swaying in both x and z directions for more natural movement
+      tempObject.position.x += Math.sin(time * 0.1 + particle.offset) * 0.4
+      tempObject.position.z += Math.cos(time * 0.1 + particle.offset) * 0.4
+      
+      // Set scale based on particle size
+      tempObject.scale.setScalar(particle.size * size)
+      
+      // Update matrix
+      tempObject.updateMatrix()
+      if (mesh.current) {
+        mesh.current.setMatrixAt(i, tempObject.matrix)
+      }
+    })
+    
+    if (mesh.current) {
+      mesh.current.instanceMatrix.needsUpdate = true
+    }
+  })
+
+  return (
+    <instancedMesh ref={mesh} args={[undefined, undefined, count]} frustumCulled={false}>
+      <circleGeometry args={[1, 6]} />
+      <meshBasicMaterial color="#ffffff" transparent opacity={0.9} side={THREE.DoubleSide} />
+    </instancedMesh>
+  )
+}
+
+// Enhanced Snow Ground component with simple terrain features
+function SnowGround() {
+  const snowTexture = useTexture('/textures/snow.jpg')
+  
+  // Configure texture
+  snowTexture.wrapS = snowTexture.wrapT = THREE.RepeatWrapping
+  snowTexture.repeat.set(40, 40) // Doubled the repeat value for the larger ground
+  
+  return (
+    <group>
+      {/* Main flat ground - extended to 2x size */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
+        <planeGeometry args={[1000, 1000]} /> {/* Doubled from 500x500 to 1000x1000 */}
+        <meshStandardMaterial 
+          map={snowTexture}
+          roughness={0.9}
+          metalness={0.1}
+        />
+      </mesh>
+      
+      {/* Distant mountains to create a horizon */}
+      <group position={[0, 0, 0]}>
+        {/* North mountains */}
+        <mesh position={[0, 50, -450]} receiveShadow>
+          <boxGeometry args={[900, 100, 10]} />
+          <meshStandardMaterial color="#e0e0e0" roughness={0.9} />
+        </mesh>
+        
+        {/* East mountains */}
+        <mesh position={[450, 50, 0]} rotation={[0, Math.PI/2, 0]} receiveShadow>
+          <boxGeometry args={[900, 100, 10]} />
+          <meshStandardMaterial color="#e0e0e0" roughness={0.9} />
+        </mesh>
+        
+        {/* South mountains */}
+        <mesh position={[0, 50, 450]} receiveShadow>
+          <boxGeometry args={[900, 100, 10]} />
+          <meshStandardMaterial color="#e0e0e0" roughness={0.9} />
+        </mesh>
+        
+        {/* West mountains */}
+        <mesh position={[-450, 50, 0]} rotation={[0, Math.PI/2, 0]} receiveShadow>
+          <boxGeometry args={[900, 100, 10]} />
+          <meshStandardMaterial color="#e0e0e0" roughness={0.9} />
+        </mesh>
+      </group>
+    </group>
+  )
+}
+
+// Enhanced lighting setup for darker, aurora-focused atmosphere
+function SceneLighting() {
+  return (
+    <>
+      {/* Main directional light (sun) - reduced for darker night atmosphere */}
+      <directionalLight 
+        position={[50, 100, 50]} 
+        intensity={0.4} // Reduced from 0.7 to make the night darker
+        castShadow 
+        shadow-mapSize={[4096, 4096]}
+        shadow-camera-far={500}
+        shadow-camera-left={-150}
+        shadow-camera-right={150}
+        shadow-camera-top={150}
+        shadow-camera-bottom={-150}
+        shadow-bias={-0.0005}
+        color="#a0c8ff" // Cooler blue tint for moonlight effect
+      />
+      
+      {/* Ambient light with blue tint - reduced for darker scene */}
+      <ambientLight intensity={0.15} color="#8090ff" /> {/* Reduced from 0.2 to 0.15 */}
+      
+      {/* Hemisphere light with enhanced blue sky */}
+      <hemisphereLight 
+        args={["#6090ff", "#e6f0ff", 0.3]} // Reduced from 0.4 to 0.3
+        position={[0, 50, 0]} 
+      />
+      
+      {/* Fill light with blue tint */}
+      <directionalLight 
+        position={[-30, 20, -30]} 
+        intensity={0.1} // Reduced from 0.15 to 0.1
+        color="#8eb8ff" 
+      />
+      
+      {/* Additional point light for the igloo area with blue tint */}
+      <pointLight 
+        position={[30, 5, -40]} 
+        intensity={1.0} // Reduced from 1.3 to 1.0
+        color="#b4d8ff" 
+        distance={60} 
+        decay={2}
+        castShadow
+        shadow-mapSize={[1024, 1024]}
+        shadow-bias={-0.001}
+      />
+      
+      {/* Subtle blue rim light for extra vibes */}
+      <pointLight 
+        position={[-40, 10, 30]} 
+        intensity={0.5} // Reduced from 0.6 to 0.5
+        color="#80b0ff" 
+        distance={80} 
+        decay={2}
+      />
+    </>
+  )
+}
+
+// Moon component with enhanced blue glow and aurora interaction
+function Moon() {
+  const moonTexture = useTexture('/winters_eve/assets/moon_sd.png')
+  
+  // Position the moon higher in the sky and further away
+  const moonPosition: [number, number, number] = [-200, 180, 300] // Raised higher and further from player
+  const moonSize = 32 // Slightly reduced for a less dominant appearance
+  
+  // Use a single ref for optimization
+  const moonRefs = useRef({
+    light: null as THREE.DirectionalLight | null,
+    glow: null as THREE.PointLight | null
+  })
+  
+  useFrame(({ clock }) => {
+    // Subtle pulsing effect with reduced intensity
+    const time = clock.getElapsedTime()
+    
+    if (moonRefs.current.light) {
+      moonRefs.current.light.intensity = 0.5 + Math.sin(time * 0.2) * 0.1
+    }
+    
+    if (moonRefs.current.glow) {
+      moonRefs.current.glow.intensity = 1.0 + Math.sin(time * 0.3) * 0.2
+    }
+  })
+  
+  return (
+    <group>
+      {/* Main moon sprite - optimized with proper depth testing */}
+      <sprite position={moonPosition} scale={[moonSize, moonSize, 1]} renderOrder={3}>
+        <spriteMaterial 
+          map={moonTexture} 
+          transparent={true} 
+          opacity={0.9} 
+          color="#e8f0ff"
+          depthTest={true} // Enable depth testing so it's hidden behind objects
+          depthWrite={false} // Don't write to depth buffer (avoids z-fighting with itself)
+          fog={false}
+        />
+      </sprite>
+      
+      {/* Outer glow layer (only visible against sky) */}
+      <sprite position={moonPosition} scale={[moonSize * 1.2, moonSize * 1.2, 1]} renderOrder={1}>
+        <spriteMaterial 
+          map={moonTexture} 
+          transparent={true} 
+          opacity={0.2} 
+          color="#b0c8ff"
+          depthTest={true} // Enable depth testing
+          depthWrite={false}
+          fog={false}
+        />
+      </sprite>
+      
+      {/* Directional light from moon for casting shadows - dimmed */}
+      <directionalLight
+        ref={(ref) => { moonRefs.current.light = ref }}
+        position={moonPosition}
+        intensity={0.5}
+        color="#d0e0ff"
+        castShadow
+        shadow-mapSize={[1024, 1024]} // Reduced for better performance
+        shadow-camera-far={500}
+        shadow-camera-left={-100}
+        shadow-camera-right={100}
+        shadow-camera-top={100}
+        shadow-camera-bottom={-100}
+        shadow-bias={-0.0005}
+      />
+      
+      {/* Subtle glow around the moon - now a child of the moon position for better culling */}
+      <pointLight
+        ref={(ref) => { moonRefs.current.glow = ref }}
+        position={moonPosition}
+        intensity={0.8}
+        distance={350}
+        decay={2}
+        color="#d0e0ff"
+      />
+    </group>
+  )
+}
+
+// Homebase Igloo Area
+function HomebaseArea() {
+  const [isIglooLoaded, setIsIglooLoaded] = useState(false)
+  
+  const handleIglooLoaded = () => {
+    setIsIglooLoaded(true)
+  }
+  
+  return (
+    <group position={[30, 0, -40]}>
+      {/* Main Igloo - adjusted to be slightly smaller and raised up from the ground */}
+      <Igloo 
+        position={[0, 0, 0]} 
+        scale={2.2} 
+        rotation={[0, Math.PI / 1.5, 0]} 
+        onLoad={handleIglooLoaded} 
+      />
+      
+      {/* Party lights and disco ball inside the igloo */}
+      {isIglooLoaded && (
+        <group>
+          {/* Disco ball hanging from the ceiling */}
+          <DiscoBall position={[0, 4, 0]} scale={0.5} />
+          
+          {/* Pink flickering light */}
+          <FlickeringLight 
+            position={[-1.5, 3, 0]} 
+            color="#ff00ff" 
+            intensity={1.2} 
+            distance={8}
+            minIntensity={0.6}
+            maxIntensity={1.8}
+            speed={0.15}
+          />
+          
+          {/* Green flickering light */}
+          <FlickeringLight 
+            position={[1.5, 3, 0]} 
+            color="#00ff80" 
+            intensity={1.2} 
+            distance={8}
+            minIntensity={0.7}
+            maxIntensity={1.9}
+            speed={0.12}
+          />
+        </group>
+      )}
+      
+      {/* Welcome Sign - positioned exactly where the player was standing */}
+      {isIglooLoaded && (
+        <group 
+          // Converting from player world coordinates to local coordinates relative to the group
+          position={[-1.99 - 30, 2.5, 5.17 + 40]} // Raised higher
+          // Flipped 180 degrees from previous rotation
+          rotation={[0, Math.PI * 1.75, 0]}
+          scale={[4.5, 4.5, 4.5]} // 3x bigger (from 1.5 to 4.5)
+        >
+          {/* Taller sign posts styled like ski poles */}
+          <mesh position={[-1.5, -0.5, 0]} rotation={[0, 0, 0]}>
+            <cylinderGeometry args={[0.15, 0.15, 6.5, 8]} />
+            <meshStandardMaterial color="#5D4037" />
+            
+            {/* Connection to sign - horizontal support */}
+            <mesh position={[0.75, 3.2, 0]} rotation={[0, 0, Math.PI/2]}>
+              <cylinderGeometry args={[0.1, 0.1, 1.5, 8]} />
+              <meshStandardMaterial color="#5D4037" />
+            </mesh>
+          </mesh>
+          
+          <mesh position={[1.5, -0.5, 0]} rotation={[0, 0, 0]}>
+            <cylinderGeometry args={[0.15, 0.15, 6.5, 8]} />
+            <meshStandardMaterial color="#5D4037" />
+            
+            {/* Connection to sign - horizontal support */}
+            <mesh position={[-0.75, 3.2, 0]} rotation={[0, 0, Math.PI/2]}>
+              <cylinderGeometry args={[0.1, 0.1, 1.5, 8]} />
+              <meshStandardMaterial color="#5D4037" />
+            </mesh>
+          </mesh>
+          
+          {/* Sign board - positioned closer to the horizontal supports */}
+          <mesh position={[0, 3.3, 0]}>
+            <boxGeometry args={[4, 1, 0.2]} />
+            <meshStandardMaterial color="#5D4037" /> {/* Darker wood color */}
+            
+            {/* Snow on top of the sign */}
+            <mesh position={[0, 0.55, 0]} scale={[1, 0.1, 1.1]}>
+              <boxGeometry args={[4, 1, 0.2]} />
+              <meshStandardMaterial color="#ffffff" roughness={0.9} />
+            </mesh>
+            
+            {/* Sign face with icy blue background */}
+            <mesh position={[0, 0, 0.11]}>
+              <planeGeometry args={[3.8, 0.8]} />
+              <meshStandardMaterial color="#a0d8ff" roughness={0.3} metalness={0.2} /> {/* Icy blue color */}
+              
+              {/* Icicles at the bottom of the sign */}
+              <group position={[0, -0.45, 0.01]}>
+                <mesh position={[-1.5, 0, 0]}>
+                  <coneGeometry args={[0.1, 0.4, 4]} />
+                  <meshStandardMaterial color="#e6f0ff" transparent opacity={0.8} />
+                </mesh>
+                <mesh position={[-0.9, 0, 0]}>
+                  <coneGeometry args={[0.08, 0.3, 4]} />
+                  <meshStandardMaterial color="#e6f0ff" transparent opacity={0.8} />
+                </mesh>
+                <mesh position={[0, 0, 0]}>
+                  <coneGeometry args={[0.1, 0.5, 4]} />
+                  <meshStandardMaterial color="#e6f0ff" transparent opacity={0.8} />
+                </mesh>
+                <mesh position={[0.8, 0, 0]}>
+                  <coneGeometry args={[0.07, 0.25, 4]} />
+                  <meshStandardMaterial color="#e6f0ff" transparent opacity={0.8} />
+                </mesh>
+                <mesh position={[1.6, 0, 0]}>
+                  <coneGeometry args={[0.09, 0.35, 4]} />
+                  <meshStandardMaterial color="#e6f0ff" transparent opacity={0.8} />
+                </mesh>
+              </group>
+              
+              {/* Club text */}
+              <Text
+                position={[-0.7, 0, 0.02]}
+                scale={0.5}
+                color="#0a3b72" // Deep blue color for contrast
+                fontSize={0.7}
+                font="/fonts/Heavitas.ttf" // Using the Heavitas font you added
+                textAlign="center"
+                anchorX="center"
+                anchorY="middle"
+                outlineWidth={0.02}
+                outlineColor="#ffffff"
+              >
+                Club
+              </Text>
+              
+              {/* Blue P emoji-style */}
+              <mesh position={[0, 0, 0.01]}>
+                <circleGeometry args={[0.35, 32]} />
+                <meshBasicMaterial color="#1e88e5" /> {/* Blue color for P emoji */}
+                <Text
+                  position={[0, 0.0, 0.01]}
+                  scale={0.5}
+                  color="#ffffff"
+                  fontSize={0.8}
+                  font="/fonts/Heavitas.ttf"
+                  textAlign="center"
+                  anchorX="center"
+                  anchorY="middle"
+                >
+                  P
+                </Text>
+              </mesh>
+              
+              {/* Pookie text */}
+              <Text
+                position={[1.0, 0, 0.02]}
+                scale={0.5}
+                color="#0a3b72" // Deep blue color for contrast
+                fontSize={0.7}
+                font="/fonts/Heavitas.ttf" // Using the Heavitas font you added
+                textAlign="center"
+                anchorX="center"
+                anchorY="middle"
+                outlineWidth={0.02}
+                outlineColor="#ffffff"
+              >
+                ookie
+              </Text>
+            </mesh>
+          </mesh>
+          
+          {/* Crossed snowboards at the base */}
+          <group position={[0, -3.5, 0]} rotation={[0, Math.PI/4, 0]}>
+            <mesh position={[0, 0, 0.3]} rotation={[0, 0, Math.PI/6]}>
+              <boxGeometry args={[0.8, 4, 0.1]} />
+              <meshStandardMaterial color="#ff5252" />
+            </mesh>
+            <mesh position={[0, 0, -0.3]} rotation={[0, 0, -Math.PI/6]}>
+              <boxGeometry args={[0.8, 4, 0.1]} />
+              <meshStandardMaterial color="#2196f3" />
+            </mesh>
+          </group>
+        </group>
+      )}
+      
+      {/* Path to Igloo - adjusted to lead to the entrance */}
+      <mesh rotation={[-Math.PI / 2, 0, Math.PI / 4]} position={[-7, 0.01, -7]}>
+        <planeGeometry args={[15, 4]} />
+        <meshStandardMaterial color="#f0f0ff" roughness={0.7} metalness={0.1} />
+      </mesh>
+      
+      {/* Enhanced snow bank around igloo base to hide any gaps */}
+      <mesh position={[0, -0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[2.5, 7, 32]} />
+        <meshStandardMaterial color="#ffffff" roughness={0.9} />
+      </mesh>
+    </group>
+  )
+}
+
+// Simple Aurora Borealis component
+function AuroraBorealis() {
+  const auroraRef = useRef<THREE.Mesh>(null);
+  const materialRef = useRef<THREE.ShaderMaterial>(null);
+  
+  useFrame(({ clock }) => {
+    if (materialRef.current) {
+      materialRef.current.uniforms.uTime.value = clock.getElapsedTime();
+    }
+  });
+  
+  return (
+      <mesh 
+      ref={auroraRef}
+      position={[0, 300, 0]}
+      rotation={[0, 0, 0]}
+      scale={[1500, 300, 1500]}
+    >
+      <sphereGeometry args={[1, 32, 32]} />
+      <shaderMaterial
+        ref={materialRef}
+        uniforms={{
+          uTime: { value: 0 },
+          uIntensity: { value: 0.5 }
+        }}
+        vertexShader={`
+          uniform float uTime;
+          varying vec2 vUv;
+          varying vec3 vPosition;
+          
+          void main() {
+            vUv = uv;
+            vPosition = position;
+            
+            vec4 modelPosition = modelMatrix * vec4(position, 1.0);
+            vec4 viewPosition = viewMatrix * modelPosition;
+            vec4 projectedPosition = projectionMatrix * viewPosition;
+            
+            gl_Position = projectedPosition;
+          }
+        `}
+        fragmentShader={`
+          uniform float uTime;
+          uniform float uIntensity;
+          varying vec2 vUv;
+          varying vec3 vPosition;
+          
+          void main() {
+            // Calculate position-based color
+            float yPos = vPosition.y + 0.5; // Normalize to 0-1 range
+            
+            // Create aurora bands
+            float band1 = smoothstep(0.4, 0.6, yPos);
+            float band2 = smoothstep(0.6, 0.8, yPos);
+            
+            // Create wave effect
+            float wave1 = sin(vPosition.x * 5.0 + uTime * 0.2) * 0.5 + 0.5;
+            float wave2 = sin(vPosition.z * 3.0 + uTime * 0.3) * 0.5 + 0.5;
+            
+            // Combine waves and bands
+            float mask = (band1 * wave1 + band2 * wave2) * uIntensity;
+            
+            // Create color gradient
+            vec3 color1 = vec3(0.0, 1.0, 0.6); // Teal
+            vec3 color2 = vec3(0.2, 0.4, 1.0); // Blue
+            vec3 color3 = vec3(0.6, 0.2, 1.0); // Purple
+            
+            vec3 finalColor;
+            if (yPos < 0.5) {
+              finalColor = mix(color1, color2, yPos * 2.0);
+            } else {
+              finalColor = mix(color2, color3, (yPos - 0.5) * 2.0);
+            }
+            
+            // Apply mask and fade at edges
+            float edgeFade = 1.0 - pow(abs(vUv.y - 0.5) * 2.0, 2.0);
+            float alpha = mask * edgeFade;
+            
+            gl_FragColor = vec4(finalColor, alpha);
+          }
+        `}
+        transparent
+        depthWrite={false}
+        side={THREE.BackSide}
+      />
+    </mesh>
+  );
+}
+
+// Fishing Area component
+function FishingArea({ position = [200, 0, -200] }: { position?: [number, number, number] }) {
+  // Create a reference to track time for animations
+  const timeRef = useRef(0)
+  
+  // Simple animation for water
+  useFrame((_, delta) => {
+    timeRef.current += delta
+  })
+  
+  return (
+    <group position={position}>
+      {/* Frozen lake for fishing */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]} receiveShadow>
+        <circleGeometry args={[50, 64]} />
+        <meshStandardMaterial 
+          color="#a0d8ff"
+          roughness={0.1}
+          metalness={0.3}
+          transparent
+          opacity={0.8}
+        />
+      </mesh>
+      
+      {/* Fishing area marker */}
+      <mesh position={[0, 1, 0]}>
+        <boxGeometry args={[5, 2, 5]} />
+        <meshStandardMaterial color="#2196f3" transparent opacity={0.7} />
+      </mesh>
+      
+      {/* Fishing area sign */}
+      <group position={[0, 5, -40]}>
+        <mesh>
+          <boxGeometry args={[20, 5, 1]} />
+          <meshStandardMaterial color="#5D4037" />
+        </mesh>
+        <Text
+          position={[0, 0, 0.6]}
+          scale={2}
+          color="#ffffff"
+          fontSize={1}
+          font="/fonts/Heavitas.ttf"
+          textAlign="center"
+          anchorX="center"
+          anchorY="middle"
+        >
+          FISHING SPOT
+        </Text>
+      </group>
+      
+      {/* Placeholder for fishing holes */}
+      {[-20, -10, 0, 10, 20].map((x, index) => (
+        <group key={index} position={[x, 0.1, 0]}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]}>
+            <circleGeometry args={[2, 32]} />
+            <meshStandardMaterial 
+              color="#004080"
+              roughness={0.3}
+              metalness={0.5}
+              transparent
+              opacity={0.9}
+            />
+          </mesh>
+          
+          {/* Simple animated water surface */}
+          <mesh 
+            rotation={[-Math.PI / 2, 0, 0]} 
+            position={[0, 0.05, 0]}
+            // Simple animation based on time
+            onUpdate={(self) => {
+              const time = timeRef.current
+              self.position.y = Math.sin(time * 2) * 0.02 + 0.05
+            }}
+          >
+            <circleGeometry args={[1.8, 32]} />
+            <meshStandardMaterial 
+              color="#0066cc"
+              roughness={0.1}
+              metalness={0.8}
+              transparent
+              opacity={0.8}
+            />
+        </mesh>
+      </group>
+      ))}
+    </group>
+  )
+}
+
+// Main game scene component
+export default function GameScene({ onLoadComplete }: GameSceneProps) {
+  const [isLoaded, setIsLoaded] = useState(false)
+  const [dpr, setDpr] = useState(1.5) // Dynamic DPR for performance
+  const [playerPosition, setPlayerPosition] = useState(new THREE.Vector3(0, 0, 0))
+  const [sensitivity, setSensitivity] = useState({
+    horizontal: 2.2,
+    vertical: 2.0
+  })
+  
+  // Handle player loaded
+  const handlePlayerLoaded = () => {
+    setIsLoaded(true)
+    if (onLoadComplete) onLoadComplete()
+  }
+
+  // Handle player position change
+  const handlePositionChange = (position: THREE.Vector3) => {
+    setPlayerPosition(position.clone())
+  }
+
+  // Handle sensitivity change
+  const handleSensitivityChange = (horizontal: number, vertical: number) => {
+    setSensitivity({ horizontal, vertical })
+  }
+  
+  // Handle performance changes
+  const handlePerformanceChange = ({ factor }: { factor: number }) => {
+    // Adjust quality based on performance
+    setDpr(Math.max(1, Math.min(2, 1.5 * factor)))
+  }
+  
+  // Configure shadow settings
+  useEffect(() => {
+    // Set up shadow settings when the component mounts
+    if (typeof window !== 'undefined') {
+      THREE.Object3D.DEFAULT_UP.set(0, 1, 0);
+      THREE.ColorManagement.enabled = true;
+    }
+  }, []);
+  
+  return (
+    <>
+      <Canvas 
+        shadows 
+        dpr={dpr}
+        gl={{ 
+          antialias: true,
+          alpha: false,
+          stencil: false,
+          depth: true,
+          powerPreference: 'high-performance'
+        }}
+        camera={{ position: [0, 0, 0], fov: 75, far: 2000 }}
+        shadows-type="PCFSoftShadowMap"
+      >
+        <PerformanceMonitor onDecline={handlePerformanceChange} onIncline={handlePerformanceChange}>
+          {/* Adaptive DPR for performance */}
+          <AdaptiveDpr pixelated />
+          
+          {/* Scene lighting */}
+          <SceneLighting />
+          
+          {/* Night sky background */}
+          <color attach="background" args={['#051428']} />
+          
+          {/* Aurora Borealis effect */}
+          <AuroraBorealis />
+          
+          {/* Moon */}
+          <Moon />
+          
+          {/* Atmospheric fog - adjusted for better night sky visibility */}
+          <fog attach="fog" args={['#0a1a30', 50, 1500]} />
+          
+          {/* Enhanced Snow Ground with expanded terrain */}
+          <SnowGround />
+          
+          {/* Snowfall effect - now follows the player */}
+          <Snowfall count={600} size={0.08} area={150} playerPosition={playerPosition} />
+          
+          {/* Homebase Igloo Area */}
+          <HomebaseArea />
+          
+          {/* Fishing Area */}
+          <FishingArea position={[200, 0, -200]} />
+          
+          {/* Player character */}
+        <Player 
+          position={[0, 0, 0]}
+            onPlayerLoaded={handlePlayerLoaded}
+          onPositionChange={handlePositionChange}
+            speed={15}
+            jumpHeight={1.5}
+          horizontalSensitivity={sensitivity.horizontal}
+          verticalSensitivity={sensitivity.vertical}
+          />
+          
+          {/* Stars in the sky - enhanced for more vibrant twinkling */}
+          <Stars 
+            radius={500} 
+            depth={100} 
+            count={7000}
+            factor={6}
+            saturation={0.8}
+            fade 
+            speed={1.5}
+          />
+          
+          {/* Preload assets */}
+          <Preload all />
+        </PerformanceMonitor>
+      </Canvas>
+      
+      {/* UI Elements */}
+      <div className="absolute bottom-4 left-4 right-4">
+        <WinterChat />
+      </div>
+      
+      <div className="absolute top-4 right-4">
+        <MiniMap playerPosition={playerPosition} />
+      </div>
+      
+      {/* Controls Panel - Ensure it's visible */}
+      <ControlsPanel 
+        additionalControls={[
+          { key: 'Left Click', action: 'Throw Snowball' },
+          { key: 'F3', action: 'Toggle Debug' }
+        ]} 
+        onSensitivityChange={(value) => {
+          // Update both horizontal and vertical sensitivity
+          handleSensitivityChange(value * 2, value * 1.8)
+        }}
+        initialSensitivity={sensitivity.horizontal / 2}
+      />
+    </>
+  )
+} 
