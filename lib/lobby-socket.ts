@@ -16,12 +16,15 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
   const [state, setState] = useState<LobbySocketState>({ players: [], countdown: null, status: 'open', connected: false })
   const socketRef = useRef<Socket | null>(null)
   const reconnectAttemptsRef = useRef(0)
-  const url = useMemo(() => {
-    // Prefer explicit env; fallback to current origin on client; dev fallback to localhost
-    if (process.env.NEXT_PUBLIC_SOCKET_URL) return process.env.NEXT_PUBLIC_SOCKET_URL
-    if (typeof window !== 'undefined') return window.location.origin
-    return 'http://localhost:4001'
+  const urlCandidates = useMemo(() => {
+    const list: string[] = []
+    if (process.env.NEXT_PUBLIC_SOCKET_URL) list.push(process.env.NEXT_PUBLIC_SOCKET_URL)
+    if (typeof window !== 'undefined') list.push(window.location.origin)
+    list.push('http://localhost:4001')
+    // de-dup while preserving order
+    return Array.from(new Set(list))
   }, [])
+  const currentUrlIdxRef = useRef(0)
 
   useEffect(() => {
     if (!lobbyId) return
@@ -31,7 +34,7 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
     const fallbackPath = '/socket.io'
     const transports = isProd ? ['websocket'] : ['polling', 'websocket']
 
-    let socketInstance = io(url, {
+    let socketInstance = io(urlCandidates[currentUrlIdxRef.current]!, {
       path: primaryPath,
       addTrailingSlash: false,
       transports,
@@ -99,7 +102,7 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
       s.on('connect_error', (error: any) => {
         const now = Date.now()
         if (now - lastErrLog > 5000) {
-          console.error('🚫 Socket connection error:', error?.message || 'Unknown')
+          console.error('🚫 Socket connection error:', error?.message || 'Unknown', 'host=', (s.io as any)?.uri || urlCandidates[currentUrlIdxRef.current])
           lastErrLog = now
         }
         setState((prev) => ({ ...prev, connected: false }))
@@ -118,7 +121,7 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
             s.close()
           } catch {}
 
-          socketInstance = io(url, {
+          socketInstance = io(urlCandidates[currentUrlIdxRef.current]!, {
             path: fallbackPath,
             addTrailingSlash: false,
             transports: ['polling', 'websocket'],
@@ -131,6 +134,33 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
             autoConnect: true,
           })
 
+          setupHandlers(socketInstance)
+          socketRef.current = socketInstance
+          return
+        }
+
+        // If still failing, try next HOST candidate
+        const hasMoreHosts = currentUrlIdxRef.current < urlCandidates.length - 1
+        if (hasMoreHosts) {
+          currentUrlIdxRef.current += 1
+          const nextHost = urlCandidates[currentUrlIdxRef.current]
+          console.log('🌐 Switching socket host to:', nextHost)
+          try {
+            s.off()
+            s.close()
+          } catch {}
+          socketInstance = io(nextHost!, {
+            path: fallbackPath,
+            addTrailingSlash: false,
+            transports: ['polling', 'websocket'],
+            reconnection: true,
+            reconnectionAttempts: 10,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            timeout: 15000,
+            withCredentials: true,
+            autoConnect: true,
+          })
           setupHandlers(socketInstance)
           socketRef.current = socketInstance
         }
