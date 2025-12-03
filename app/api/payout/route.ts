@@ -8,6 +8,8 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { payoutFromEscrow } from '@/lib/payout-service'
 
+export const dynamic = 'force-dynamic'
+
 const BodySchema = z.object({
   matchId: z.string().optional(),
   escrowPublicKey: z.string().min(32),

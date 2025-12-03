@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 
+export const dynamic = 'force-dynamic';
+
 type RouteContext = {
   params: {
     lobbyId: string;

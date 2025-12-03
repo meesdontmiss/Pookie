@@ -8,6 +8,8 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { refundFromEscrow } from '@/lib/refund-service'
 
+export const dynamic = 'force-dynamic'
+
 const BodySchema = z.object({
   escrowPublicKey: z.string().min(32),
   playerPublicKey: z.string().min(32),

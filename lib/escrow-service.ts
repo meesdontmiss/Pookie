@@ -14,6 +14,7 @@ function getServiceEnv(): { url: string; key: string } {
 
   const key = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY
     || process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY
+    || process.env.NEXT_SUPABASE_SERVICE_KEY
     || process.env.SUPABASE_SERVICE_ROLE_KEY
     || process.env.SUPABASE_SERVICE_KEY
     || ''

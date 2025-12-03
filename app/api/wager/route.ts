@@ -10,6 +10,8 @@ import { HARDCODED_LOBBIES } from '@/shared/hardcoded-lobbies'
 import EscrowService from '@/lib/escrow-service'
 import { buildTransferTransaction, isValidSolanaAddress } from '@/lib/solana-utils'
 
+export const dynamic = 'force-dynamic'
+
 const RequestSchema = z.object({
   lobbyId: z.string().min(1),
   playerPublicKey: z.string().min(32),
