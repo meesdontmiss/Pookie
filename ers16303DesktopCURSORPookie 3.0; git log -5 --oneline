@@ -1,87 +1,12 @@
-/* Fixed-stage layout for desktop */
-.fixedViewport {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(to bottom, #1e3a8a 0%, #020617 100%);
-  overflow: hidden;
-}
-
-.stageWrapper {
-  width: 1920px;
-  height: 1080px;
-  transform-origin: center center;
-}
-
-.stageContent {
-  position: relative;
-  width: 1920px;
-  height: 1080px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  overflow: hidden;
-}
-
-/* Mobile-optimized layout */
-.mobileViewport {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  background: linear-gradient(to bottom, #1e3a8a 0%, #020617 100%);
-  overflow-x: hidden;
-  overflow-y: auto;
-}
-
-.mobileWrapper {
-  width: 100vw;
-  min-height: 100vh;
-  transform-origin: top center;
-}
-
-.mobileContent {
-  position: relative;
-  width: 100%;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  padding: 20px 16px;
-}
-
-.loadingText {
-  color: #93c5fd;
-  font-size: 18px;
-  letter-spacing: 0.5px;
-  animation: subtlePulse 1.6s ease-in-out infinite;
-  position: absolute;
-  bottom: 180px;
-}
-
-@keyframes subtlePulse {
-  0% { opacity: 0.4; }
-  50% { opacity: 1; }
-  100% { opacity: 0.4; }
-}
-
 /* Non-Tailwind hero overlay for homepage */
 .heroOverlay {
-  position: absolute;
-  top: 40px;
+  position: fixed;
+  top: 0;
   left: 0;
   right: 0;
-  bottom: 0;
   z-index: 50;
   pointer-events: none;
   text-align: center;
-  margin: 0;
-  padding: 0;
 }
 
 .heroRow {
@@ -91,7 +16,6 @@
   justify-content: center;
   column-gap: 12px;
   padding: 0 8px;
-  margin: 0;
 }
 
 .heroCenter {
@@ -126,7 +50,7 @@
 .waddleGif {
   width: 340px;
   height: auto;
-  position: absolute;
+  position: fixed;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -30%);
@@ -157,49 +81,29 @@
   margin-left: -10px;
 }
 
-/* Mobile adjustments */
-@media (max-width: 768px) {
+@media (max-width: 460px) {
   .heroOverlay {
-    position: relative;
-    inset: auto;
-    padding-top: 20px;
+    top: 4px;
   }
   .heroRow {
-    gap: 12px;
-    padding: 0 16px;
+    gap: 8px;
   }
   .flame {
-    height: 80px;
-    transform: translateY(-20px);
+    height: 58px;
+    transform: translateY(-40px);
   }
   .flameLeft {
-    margin-right: -8px;
+    margin-right: -6px;
   }
   .flameRight {
-    margin-left: -8px;
-    transform: scaleX(-1) translateY(-20px);
-  }
-  .titleImage {
-    width: 280px;
-    transform: translateY(4px);
-  }
-  .taglineImage {
-    width: 320px;
-    transform: translateY(-220px);
-  }
-  .waddleGif {
-    width: 220px;
-    position: relative;
-    top: auto;
-    left: auto;
-    transform: none;
-    margin: 40px auto;
+    margin-left: -6px;
+    transform: scaleX(-1) translateY(-40px);
   }
 }
 
 /* CTA bottom bar and 3D model buttons */
 .ctaBar {
-  position: absolute;
+  position: fixed;
   bottom: 60px;
   left: 0;
   right: 0;
@@ -218,6 +122,15 @@
   pointer-events: none;
 }
 
+@media (max-width: 768px) {
+  .ctaRow {
+    gap: 60px;
+  }
+  .modelButton {
+    width: 130px;
+    height: 130px;
+  }
+}
 
 .modelButton {
   width: 160px;
@@ -306,7 +219,7 @@
 
 /* --- Mac-style Dock --- */
 .dock {
-  position: absolute;
+  position: fixed;
   left: 50%;
   transform: translateX(-50%);
   bottom: 56px;
@@ -344,36 +257,14 @@
 }
 .dockItem:hover { /* transform handled dynamically for realistic magnification */ }
 
-@media (max-width: 768px) {
-  .dock {
-    position: relative;
-    bottom: auto;
-    margin-top: 40px;
-    margin-bottom: 40px;
-  }
+@media (max-width: 640px) {
   .dockInner {
-    gap: 16px;
-    padding: 12px 16px;
-    border-radius: 16px;
-    max-width: none;
-    width: auto;
-  }
-  .dockItem {
-    width: 56px;
-    height: 56px;
+    gap: 12px;
+    padding: 8px 12px;
+    border-radius: 14px;
   }
   .dockItem:hover {
     transform: translateY(-4px) scale(1.08);
-  }
-  .warning {
-    position: relative;
-    margin: 20px auto;
-    max-width: 90%;
-  }
-  .loadingText {
-    position: relative;
-    bottom: auto;
-    margin: 20px 0;
   }
 }
 

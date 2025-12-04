@@ -76,7 +76,7 @@ function Snow() {
 
 export default function StartSnow() {
   return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1, pointerEvents: 'none' }}>
       <Canvas
         style={{ width: '100%', height: '100%' }}
         dpr={typeof window !== 'undefined' ? window.devicePixelRatio : 1}

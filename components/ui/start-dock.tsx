@@ -112,7 +112,7 @@ export default function StartDock({ items }: { items: DockItem[] }) {
               }}
             >
               {item.render ? (
-                <div className={styles.dockModel}>
+                <div className={styles.dockModel} style={{ width: '100%', height: '100%' }}>
                   {item.render}
                 </div>
               ) : item.imageSrc ? (
