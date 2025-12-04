@@ -10,7 +10,6 @@ import PreloadPookieOnIdle from "@/components/preload-pookie-on-idle"
 
 const STAGE_WIDTH = 1920
 const STAGE_HEIGHT = 1080
-const MOBILE_BREAKPOINT = 900
 
 const StartMiniPookieBall = dynamic(() => import("@/components/start-mini-pookie-ball"), { 
   ssr: false,
@@ -33,19 +32,30 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    const updateViewport = () => {
+    const updateScale = () => {
       if (typeof window === 'undefined') return
-      const width = window.innerWidth
-      const rawScale = Math.min(
-        width / STAGE_WIDTH,
-        window.innerHeight / STAGE_HEIGHT
-      )
-      setStageScale(Math.min(1, rawScale))
-      setIsMobile(width <= MOBILE_BREAKPOINT)
+      const mobile = window.innerWidth <= 768
+      setIsMobile(mobile)
+      
+      if (mobile) {
+        // Mobile: scale to fit viewport
+        const rawScale = Math.min(
+          window.innerWidth / STAGE_WIDTH,
+          window.innerHeight / STAGE_HEIGHT
+        )
+        setStageScale(rawScale)
+      } else {
+        // Desktop: lock to 1920x1080, scale down only if needed
+        const rawScale = Math.min(
+          window.innerWidth / STAGE_WIDTH,
+          window.innerHeight / STAGE_HEIGHT
+        )
+        setStageScale(Math.min(1, rawScale))
+      }
     }
-    updateViewport()
-    window.addEventListener('resize', updateViewport)
-    return () => window.removeEventListener('resize', updateViewport)
+    updateScale()
+    window.addEventListener('resize', updateScale)
+    return () => window.removeEventListener('resize', updateScale)
   }, [])
 
   const handleLoadComplete = () => {}
@@ -58,73 +68,15 @@ export default function Home() {
     router.push(destination)
   }, [isLoading, isNavigating, router])
 
-  const renderMobileLanding = () => (
-    <div className={styles.mobileWrapper}>
-      <div className={styles.mobileHero}>
-        <img
-          src="/images/TITLE-TEXT.gif"
-          alt="Plug Penguin"
-          className={styles.mobileTitle}
-        />
-        <img
-          src="/images/the-plastic-penguin-text-gif.gif"
-          alt="Plug Penguin Tagline"
-          className={styles.mobileTagline}
-        />
-        <img
-          src="/images/POOKIE BLANK WADDLE gif.gif"
-          alt="Pookie Waddle"
-          className={styles.mobileMascot}
-        />
-      </div>
-
-      <div className={styles.mobileActions}>
-        <button
-          className={styles.mobilePrimaryButton}
-          onClick={() => handleNavigate('/pookiesumoroyale/lobby-browser')}
-        >
-          Play Pookie Sumo Ball
-        </button>
-        <button
-          className={styles.mobileSecondaryButton}
-          onClick={() => handleNavigate('/plug-penguin')}
-        >
-          Enter Social Hub
-        </button>
-        <div className={styles.mobileLinkRow}>
-          <button
-            className={styles.mobileGhostButton}
-            onClick={() => handleNavigate('/gallery')}
-          >
-            Gallery
-          </button>
-          <button
-            className={styles.mobileGhostButton}
-            onClick={() => window.open('https://www.pornhub.com/model/pookiethepeng', '_blank')}
-          >
-            PookHub
-          </button>
-          <button
-            className={styles.mobileGhostButton}
-            onClick={() => window.open('https://dexscreener.com', '_blank')}
-          >
-            Dexscreener
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-
-  if (isMobile) {
-    return renderMobileLanding()
-  }
+  const handlePookieClick = () => handleNavigate('/plug-penguin')
 
   return (
-    <div className={styles.fixedViewport}>
-      <div className={styles.stageWrapper} style={{ transform: `scale(${stageScale})` }}>
-        <main className={styles.stageContent}>
-          <PreloadPookieOnIdle />
-          <StartSnow />
+    <>
+      <StartSnow />
+      <div className={isMobile ? styles.mobileViewport : styles.fixedViewport}>
+        <div className={isMobile ? styles.mobileWrapper : styles.stageWrapper} style={{ transform: `scale(${stageScale})` }}>
+          <main className={isMobile ? styles.mobileContent : styles.stageContent}>
+            <PreloadPookieOnIdle />
 
           <div className={styles.heroOverlay}>
             <div className={styles.heroRow}>
@@ -162,44 +114,46 @@ export default function Home() {
           
           {/* Mac-style Dock */}
           {!isNavigating && (
-            <StartDock
-              items={[
-                {
-                  key: 'sumo',
-                  title: 'Pookie Sumo Ball',
-                  onClick: () => handleNavigate('/pookiesumoroyale/lobby-browser'),
-                  render: <StartMiniPookieBall />,
-                },
-                {
-                  key: 'hub',
-                  title: 'Social Hub',
-                  onClick: () => handleNavigate('/plug-penguin'),
-                  imageSrc: '/images/pookies-smokin-shootin-dice-png.png',
-                  imageStyle: { objectFit: 'contain' },
-                },
-                {
-                  key: 'gallery',
-                  title: 'Gallery',
-                  onClick: () => handleNavigate('/gallery'),
-                  imageSrc: '/images/jeet-me.png',
-                  imageStyle: { objectFit: 'contain' },
-                },
-                {
-                  key: 'pookhub',
-                  title: 'PookHub',
-                  onClick: () => window.open('https://www.pornhub.com/model/pookiethepeng', '_blank'),
-                  imageSrc: '/images/pookie-smashin.gif',
-                  imageStyle: { objectFit: 'contain' },
-                },
-                {
-                  key: 'dexscreener',
-                  title: 'Dexscreener',
-                  onClick: () => window.open('https://dexscreener.com', '_blank'),
-                  imageSrc: '/images/POOKIE DOLLAR.jpg',
-                  imageStyle: { objectFit: 'contain' },
-                },
-              ]}
-            />
+            <div className={styles.dock}>
+              <div className={styles.dockInner}>
+                <button 
+                  className={styles.dockItem} 
+                  title="Pookie Sumo Ball"
+                  onClick={() => handleNavigate('/pookiesumoroyale/lobby-browser')}
+                  style={{ position: 'relative' }}
+                >
+                  <StartMiniPookieBall />
+                </button>
+                <button 
+                  className={styles.dockItem}
+                  title="Social Hub"
+                  onClick={() => handleNavigate('/plug-penguin')}
+                >
+                  <img src="/images/pookies-smokin-shootin-dice-png.png" alt="Social Hub" className={styles.dockImg} />
+                </button>
+                <button 
+                  className={styles.dockItem}
+                  title="Gallery"
+                  onClick={() => handleNavigate('/gallery')}
+                >
+                  <img src="/images/jeet-me.png" alt="Gallery" className={styles.dockImg} />
+                </button>
+                <button 
+                  className={styles.dockItem}
+                  title="PookHub"
+                  onClick={() => window.open('https://www.pornhub.com/model/pookiethepeng', '_blank')}
+                >
+                  <img src="/images/pookie-smashin.gif" alt="PookHub" className={styles.dockImg} />
+                </button>
+                <button 
+                  className={styles.dockItem}
+                  title="Dexscreener"
+                  onClick={() => window.open('https://dexscreener.com', '_blank')}
+                >
+                  <img src="/images/POOKIE DOLLAR.jpg" alt="Dexscreener" className={styles.dockImg} />
+                </button>
+              </div>
+            </div>
             )}
 
             {isLoading && !loadError && !loadTimeout && (
@@ -214,9 +168,10 @@ export default function Home() {
               <p className={styles.warningLine}>This game doesn't work on mobile devices yet.</p>
               </div>
             )}
-        </main>
+          </main>
+        </div>
       </div>
-    </div>
+    </>
   )
 }
 
