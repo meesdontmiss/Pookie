@@ -665,9 +665,20 @@ export function CollisionShapeToolbar() {
     const a = document.createElement('a')
     a.href = url
     a.download = `collision-map-${new Date().toISOString().slice(0, 10)}.json`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+
+    // Safely append/click/remove without assuming document.body is always available
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.appendChild(a)
+      a.click()
+      // Guard against any race conditions where the node may already be detached
+      if (a.parentNode) {
+        a.parentNode.removeChild(a)
+      }
+    } else {
+      // Fallback: just trigger the click if possible
+      a.click()
+    }
+
     URL.revokeObjectURL(url)
       setIsExportModalOpen(false)
   }

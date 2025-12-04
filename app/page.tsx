@@ -72,8 +72,9 @@ export default function Home() {
 
   return (
     <>
-      <StartSnow />
       <div className={isMobile ? styles.mobileViewport : styles.fixedViewport}>
+        {/* Full-viewport star/snow background behind the scaled stage */}
+        <StartSnow />
         <div className={isMobile ? styles.mobileWrapper : styles.stageWrapper} style={{ transform: `scale(${stageScale})` }}>
           <main className={isMobile ? styles.mobileContent : styles.stageContent}>
             <PreloadPookieOnIdle />

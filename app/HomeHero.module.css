@@ -10,6 +10,7 @@
 }
 
 .stageWrapper {
+  position: relative;
   width: 1920px;
   height: 1080px;
   transform-origin: center center;
@@ -24,6 +25,7 @@
   align-items: center;
   justify-content: flex-start;
   overflow: hidden;
+  z-index: 10; /* Ensure content sits above global star/snow background */
 }
 
 /* Mobile-optimized layout */
@@ -39,6 +41,7 @@
 }
 
 .mobileWrapper {
+  position: relative;
   width: 100vw;
   min-height: 100vh;
   transform-origin: top center;
@@ -53,6 +56,7 @@
   align-items: center;
   justify-content: flex-start;
   padding: 20px 16px;
+  z-index: 10; /* Ensure mobile content sits above global star/snow background */
 }
 
 .loadingText {
