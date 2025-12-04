@@ -3,18 +3,24 @@
   background: transparent !important;
   border: none !important;
   height: auto !important;
-  line-height: 1 !important;
+  line-height: 1.2 !important;
+}
+
+.wallet-multi-wrapper {
+  min-width: 160px;
 }
 
 .wallet-multi-wrapper :where(.wallet-adapter-button-trigger) {
-  border-radius: 9999px !important;
-  padding: 0.35rem 0.8rem !important;
-  height: auto !important;
+  border-radius: 0.75rem !important; /* keep rectangular pill */
+  padding: 0.35rem 1rem !important;
+  height: 40px !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
   font-size: 0.85rem !important;
   font-weight: 600 !important;
+  white-space: nowrap !important;
+  max-width: none !important;
 }
 
 
