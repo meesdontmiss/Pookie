@@ -723,7 +723,7 @@ io.on('connection', (socket) => {
         if (!lobby) return socket.emit('message', { type: 'error', message: 'Lobby not found', code: 'ERR_NOT_FOUND' } as ServerToClient)
         if (lobby.players.size >= lobby.capacity) return socket.emit('message', { type: 'error', message: 'Lobby full', code: 'ERR_LOBBY_FULL' } as ServerToClient)
         // Join room and add/replace state
-        socket.join(lobby.id)
+        await socket.join(lobby.id)
         const playerState: PlayerState = { socketId: socket.id, wallet: data.wallet, username: data.username, ready: false, wagerLocked: false }
         lobby.players.set(data.wallet, playerState)
         socketToLobby.set(socket.id, lobby.id)
@@ -898,15 +898,15 @@ io.on('connection', (socket) => {
             fireAndForget(removeLobbyPlayerRecord(lobby.id, wallet), 'removeLobbyPlayerRecord', { lobbyId: lobby.id, wallet })
           }
         }
-        socket.leave(lobby.id)
+        await socket.leave(lobby.id)
         fireAndForget(syncLobbyPlayerCountDb(lobby.id), 'syncLobbyPlayerCountDb', { lobbyId: lobby.id })
         broadcastLobby(lobby)
         metrics.lobbyLeaves += 1
-        logger.info({ lobbyId: lobby.id, wallet: p.wallet }, 'Player left lobby')
+        logger.info({ lobbyId: lobby.id, socketId: socket.id }, 'Player left lobby')
       }
       if (data.type === 'reconnect') {
         const lobby = lobbies.get(data.lobbyId); if (!lobby) return
-        socket.join(lobby.id)
+        await socket.join(lobby.id)
         broadcastLobby(lobby)
       }
     } catch (e) {
@@ -915,11 +915,11 @@ io.on('connection', (socket) => {
   })
 
   // Room join for active match (clients provide matchSessionId)
-  socket.on('join_match_room', (payload: { matchSessionId: string }) => {
+  socket.on('join_match_room', async (payload: { matchSessionId: string }) => {
     try {
       const matchId = String(payload?.matchSessionId || '')
       if (!matchId || !activeMatches.has(matchId)) return
-      socket.join(matchId)
+      await socket.join(matchId)
       socketToMatch.set(socket.id, matchId)
       const match = activeMatches.get(matchId)!
       // Minimal status snapshot
