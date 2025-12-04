@@ -1,5 +1,0 @@
-[33m9232c87[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m fix(vercel): add collision-map-visualizer, permanent-collision-renderer, collision-shape-utils, chat-service stubs; fix escaped quotes in lobbies route
-[33md02b007[m fix(vercel): add all missing collision-testing stubs and collision-shape-preview
-[33m9484824[m fix(vercel): add baseUrl for @ alias; TSX keyboard-controls; stub world-tilt-controls/ball-with-character/camera-follow-ball; add collision-editor-grid stub
-[33mf4c4ef1[m chore: trigger deploy
-[33m2867fe9[m[33m ([m[1;31morigin/master[m[33m, [m[1;32mmaster[m[33m)[m fix(vercel): add missing sumo modules (levels, default-levels, importer, keyboard-controls, level-renderer) and collision visualization stub
