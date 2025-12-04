@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { fetchAccountHistory } from '@/lib/account-history'
 
+export const dynamic = 'force-dynamic'
+
 type RouteContext = {
   params: {
     wallet: string

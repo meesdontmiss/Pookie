@@ -1,7 +1,5 @@
 import { getSupabaseAdmin } from './supabase-admin'
 
-const supabase = getSupabaseAdmin()
-
 export interface MatchHistoryItem {
   id: string
   lobbyId: string
@@ -30,6 +28,13 @@ export interface AccountHistoryPayload {
 export async function fetchAccountHistory(wallet: string): Promise<AccountHistoryPayload> {
   if (!wallet) {
     return { matches: [], transactions: [] }
+  }
+
+  let supabase
+  try {
+    supabase = getSupabaseAdmin()
+  } catch (error) {
+    throw new Error('Supabase admin env not configured')
   }
 
   const normalized = wallet.toLowerCase()
