@@ -129,7 +129,7 @@ async function ensureSeedLobbies() {
 async function upsertLobbyPlayerRecord(lobbyId: LobbyId, player: PlayerState) {
   if (!TRACK_LOBBY_PRESENCE || player.isAi) return
   try {
-    await supabase
+    await getSupabase()
       .from('lobby_players')
       .upsert(
         {
@@ -149,7 +149,7 @@ async function upsertLobbyPlayerRecord(lobbyId: LobbyId, player: PlayerState) {
 
 async function updateLobbyPlayerReady(lobbyId: LobbyId, wallet: Wallet, ready: boolean) {
   try {
-    await supabase
+    await getSupabase()
       .from('lobby_players')
       .update({ is_ready: ready })
       .eq('lobby_id', lobbyId)
@@ -161,7 +161,7 @@ async function updateLobbyPlayerReady(lobbyId: LobbyId, wallet: Wallet, ready: b
 
 async function updateLobbyPlayerWager(lobbyId: LobbyId, wallet: Wallet, amount: number | undefined, confirmed: boolean, txSignature?: string) {
   try {
-    await supabase
+    await getSupabase()
       .from('lobby_players')
       .update({ wager_amount: amount ?? null, wager_confirmed: confirmed })
       .eq('lobby_id', lobbyId)
@@ -171,7 +171,7 @@ async function updateLobbyPlayerWager(lobbyId: LobbyId, wallet: Wallet, amount: 
   }
   if (txSignature) {
     try {
-      await supabase
+      await getSupabase()
         .from('wager_events')
         .upsert(
           {
@@ -192,7 +192,7 @@ async function updateLobbyPlayerWager(lobbyId: LobbyId, wallet: Wallet, amount: 
 async function removeLobbyPlayerRecord(lobbyId: LobbyId, wallet: Wallet) {
   if (!TRACK_LOBBY_PRESENCE || wallet.startsWith('ai-')) return
   try {
-    await supabase
+    await getSupabase()
       .from('lobby_players')
       .delete()
       .eq('lobby_id', lobbyId)
@@ -205,7 +205,7 @@ async function removeLobbyPlayerRecord(lobbyId: LobbyId, wallet: Wallet) {
 async function clearLobbyPlayersRecord(lobbyId: LobbyId) {
   if (!TRACK_LOBBY_PRESENCE) return
   try {
-    await supabase
+    await getSupabase()
       .from('lobby_players')
       .delete()
       .eq('lobby_id', lobbyId)
@@ -217,12 +217,12 @@ async function clearLobbyPlayersRecord(lobbyId: LobbyId) {
 async function syncLobbyPlayerCountDb(lobbyId: LobbyId) {
   if (!TRACK_LOBBY_PRESENCE) return
   try {
-    const { count, error } = await supabase
+    const { count, error } = await getSupabase()
       .from('lobby_players')
       .select('id', { count: 'exact', head: true })
       .eq('lobby_id', lobbyId)
     if (error) throw error
-    await supabase
+    await getSupabase()
       .from('lobbies')
       .update({ current_players: count ?? 0 })
       .eq('id', lobbyId)
@@ -233,7 +233,7 @@ async function syncLobbyPlayerCountDb(lobbyId: LobbyId) {
 
 async function updateLobbyStatusDb(lobbyId: LobbyId, status: string) {
   try {
-    await supabase
+    await getSupabase()
       .from('lobbies')
       .update({ status })
       .eq('id', lobbyId)
@@ -248,7 +248,7 @@ ensureSeedLobbies().catch((error) => console.error('[supabase] Seed error', erro
 async function resetLobbyPlayers() {
   if (!TRACK_LOBBY_PRESENCE) return
   try {
-    await supabase
+    await getSupabase()
       .from('lobby_players')
       .delete()
       .neq('lobby_id', '')
@@ -261,7 +261,7 @@ resetLobbyPlayers().catch((error) => console.error('[supabase] Reset players err
 
 async function recordMatchStart(matchId: MatchId, lobbyId: LobbyId, gameMode: string, seed: number, roster: Array<{ wallet: string; username: string; isAi?: boolean }>) {
   try {
-    await supabase
+    await getSupabase()
       .from('match_state')
       .upsert({
         id: matchId,
@@ -279,7 +279,7 @@ async function recordMatchStart(matchId: MatchId, lobbyId: LobbyId, gameMode: st
 
 async function recordMatchResult(matchId: MatchId, status: 'completed' | 'cancelled', winnerWallet?: string) {
   try {
-    await supabase
+    await getSupabase()
       .from('match_state')
       .update({
         status,
@@ -366,7 +366,7 @@ function handlePlayerStateUpdate(matchId: MatchId, wallet: Wallet, position: [nu
 
 async function insertTransactionRecord(wallet: string | null, type: string, amount: number, relatedId: string | null, description: string | null, txSignature: string | null) {
   try {
-    await supabase
+    await getSupabase()
       .from('transactions')
       .insert({
         wallet_address: wallet,
@@ -383,7 +383,7 @@ async function insertTransactionRecord(wallet: string | null, type: string, amou
 
 async function updateWagerEventStatus(txSignature: string, status: string) {
   try {
-    await supabase
+    await getSupabase()
       .from('wager_events')
       .update({ status })
       .eq('tx_signature', txSignature)
@@ -393,7 +393,7 @@ async function updateWagerEventStatus(txSignature: string, status: string) {
 }
 
 async function enqueuePaymentJob(jobType: 'payout' | 'refund', payload: Record<string, any>) {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('payment_jobs')
     .insert({ job_type: jobType, payload })
     .select('id')
@@ -403,7 +403,7 @@ async function enqueuePaymentJob(jobType: 'payout' | 'refund', payload: Record<s
 }
 
 async function claimPendingJobs(limit = 5) {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('payment_jobs')
     .select('*')
     .in('status', ['pending', 'failed'])
@@ -418,7 +418,7 @@ async function claimPendingJobs(limit = 5) {
 }
 
 async function markJobProcessing(id: string, currentStatus: string) {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('payment_jobs')
     .update({ status: 'processing' })
     .eq('id', id)
@@ -443,7 +443,7 @@ async function finalizeJob(id: string, status: 'completed' | 'failed', attempts:
   if (extraPayload) {
     update.payload = extraPayload
   }
-  const { error } = await supabase
+  const { error } = await getSupabase()
     .from('payment_jobs')
     .update(update)
     .eq('id', id)
