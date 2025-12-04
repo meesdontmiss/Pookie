@@ -1,0 +1,20 @@
+:root :where(.wallet-button-reset) {
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  height: auto !important;
+  line-height: 1 !important;
+}
+
+.wallet-multi-wrapper :where(.wallet-adapter-button-trigger) {
+  border-radius: 9999px !important;
+  padding: 0.35rem 0.8rem !important;
+  height: auto !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+}
+
+

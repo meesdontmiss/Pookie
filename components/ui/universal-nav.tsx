@@ -6,6 +6,7 @@ import { Twitter, Home, Copy, Check, FileText } from 'lucide-react' // Assuming 
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui' // Temporarily comment out
 // Removed other lucide-react icons if they were only for MusicPlayer or NetworkStatus
 import { useEffect, useState } from 'react' // Import useEffect and useState
+import './universal-nav.css'
 
 export default function UniversalNav() {
   const [hasMounted, setHasMounted] = useState(false);
@@ -88,7 +89,9 @@ export default function UniversalNav() {
             </a>
           </Link>
           {hasMounted ? (
-            <WalletMultiButton />
+            <div className="relative wallet-multi-wrapper">
+              <WalletMultiButton className="wallet-button-reset" />
+            </div>
           ) : (
             <div className="w-[150px] h-[38px] bg-white/10 rounded-md" />
           )}
