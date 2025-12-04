@@ -21,7 +21,8 @@ export default function StartMiniPookieBall() {
       borderRadius: '8px'
     }}>
       <Canvas
-        dpr={[1, 2]}
+        // Slightly lower DPR for faster startup on small canvas
+        dpr={[1, 1.3]}
         gl={{ antialias: true, alpha: true }}
         camera={{ position: [0, 0.5, 2.5], fov: 50 }}
         style={{ 
