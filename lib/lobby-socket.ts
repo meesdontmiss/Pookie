@@ -269,9 +269,10 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
         } else if (msg.type === 'error') {
           setState((prev) => ({ ...prev, error: msg.message }))
         } else if (msg.type === 'match_start') {
-          // Navigate to the arena; prefer matchId from payload, fallback to lobbyId
+          // Navigate to the arena; use authoritative matchId from payload
           try {
-            const matchId = (msg as any)?.matchId || lobbyId
+            const payload = msg.payload as any
+            const matchId = payload?.matchId || lobbyId
             const practiceParam = isPractice ? 'true' : 'false'
             if (typeof window !== 'undefined' && matchId) {
               window.location.href = `/pookiesumoroyale/game/${encodeURIComponent(matchId)}?practice=${practiceParam}`

@@ -113,49 +113,43 @@ export default function Home() {
             />
           </div>
           
-          {/* Mac-style Dock */}
+          {/* Mac-style Dock with hover magnification */}
           {!isNavigating && (
-            <div className={styles.dock}>
-              <div className={styles.dockInner}>
-                <button 
-                  className={styles.dockItem} 
-                  title="Pookie Sumo Ball"
-                  onClick={() => handleNavigate('/pookiesumoroyale/lobby-browser')}
-                  style={{ position: 'relative' }}
-                >
-                  <StartMiniPookieBall />
-                </button>
-                <button 
-                  className={styles.dockItem}
-                  title="Social Hub"
-                  onClick={() => handleNavigate('/plug-penguin')}
-                >
-                  <img src="/images/pookies-smokin-shootin-dice-png.png" alt="Social Hub" className={styles.dockImg} />
-                </button>
-                <button 
-                  className={styles.dockItem}
-                  title="Gallery"
-                  onClick={() => handleNavigate('/gallery')}
-                >
-                  <img src="/images/jeet-me.png" alt="Gallery" className={styles.dockImg} />
-                </button>
-                <button 
-                  className={styles.dockItem}
-                  title="PookHub"
-                  onClick={() => window.open('https://www.pornhub.com/model/pookiethepeng', '_blank')}
-                >
-                  <img src="/images/pookie-smashin.gif" alt="PookHub" className={styles.dockImg} />
-                </button>
-                <button 
-                  className={styles.dockItem}
-                  title="Dexscreener"
-                  onClick={() => window.open('https://dexscreener.com', '_blank')}
-                >
-                  <img src="/images/POOKIE DOLLAR.jpg" alt="Dexscreener" className={styles.dockImg} />
-                </button>
-              </div>
-            </div>
-            )}
+            <StartDock
+              items={[
+                {
+                  key: 'pookie-sumo-ball',
+                  title: 'Pookie Sumo Ball',
+                  onClick: () => handleNavigate('/pookiesumoroyale/lobby-browser'),
+                  render: <StartMiniPookieBall />,
+                },
+                {
+                  key: 'social-hub',
+                  title: 'Social Hub',
+                  onClick: () => handleNavigate('/plug-penguin'),
+                  imageSrc: '/images/pookies-smokin-shootin-dice-png.png',
+                },
+                {
+                  key: 'gallery',
+                  title: 'Gallery',
+                  onClick: () => handleNavigate('/gallery'),
+                  imageSrc: '/images/jeet-me.png',
+                },
+                {
+                  key: 'pookhub',
+                  title: 'PookHub',
+                  onClick: () => window.open('https://www.pornhub.com/model/pookiethepeng', '_blank'),
+                  imageSrc: '/images/pookie-smashin.gif',
+                },
+                {
+                  key: 'dexscreener',
+                  title: 'Dexscreener',
+                  onClick: () => window.open('https://dexscreener.com', '_blank'),
+                  imageSrc: '/images/POOKIE DOLLAR.jpg',
+                },
+              ]}
+            />
+          )}
 
             {isLoading && !loadError && !loadTimeout && (
               <div className={styles.loadingText}>
