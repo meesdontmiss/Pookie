@@ -12,6 +12,8 @@ export interface LobbySocketState {
   error?: string
 }
 
+const ENABLE_HTTP_FALLBACK = process.env.NEXT_PUBLIC_LOBBY_HTTP_FALLBACK === 'true'
+
 export function useLobbySocket(lobbyId: string | null, username: string | null, wallet: string | null, isPractice: boolean = false) {
   const [state, setState] = useState<LobbySocketState>({ players: [], countdown: null, status: 'open', connected: false })
   const socketRef = useRef<Socket | null>(null)
@@ -21,9 +23,15 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
   const httpPlayerIdRef = useRef<string | null>(null)
   const urlCandidates = useMemo(() => {
     const list: string[] = []
-    if (process.env.NEXT_PUBLIC_SOCKET_URL) list.push(process.env.NEXT_PUBLIC_SOCKET_URL)
-    if (typeof window !== 'undefined') list.push(window.location.origin)
-    list.push('http://localhost:4001')
+    const envUrl = process.env.NEXT_PUBLIC_SOCKET_URL?.trim()
+    if (envUrl) {
+      list.push(envUrl)
+    } else if (typeof window !== 'undefined') {
+      list.push(window.location.origin)
+    }
+    if (process.env.NODE_ENV !== 'production') {
+      list.push('http://localhost:4001')
+    }
     // de-dup while preserving order
     return Array.from(new Set(list))
   }, [])
@@ -35,7 +43,7 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
     const isProd = process.env.NODE_ENV === 'production'
     const primaryPath = process.env.NEXT_PUBLIC_SOCKET_PATH || '/socket.io'
     const fallbackPath = '/socket.io'
-    const transports = isProd ? ['websocket'] : ['polling', 'websocket']
+    const transports: ("websocket" | "polling")[] = isProd ? ['websocket', 'polling'] : ['polling', 'websocket']
 
     let socketInstance = io(urlCandidates[currentUrlIdxRef.current]!, {
       path: primaryPath,
@@ -52,7 +60,7 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
 
     // Lightweight HTTP fallback when socket cannot connect (join + poll)
     const startHttpFallback = async () => {
-      if (!lobbyId || httpJoinedRef.current) return
+      if (!ENABLE_HTTP_FALLBACK || !lobbyId || httpJoinedRef.current) return
       try {
         // Resolve identity similar to socket path
         let effectiveWallet = wallet && typeof wallet === 'string' ? wallet : null
@@ -380,7 +388,7 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
           window.clearInterval(httpPollTimerRef.current)
           httpPollTimerRef.current = null
         }
-        if (httpJoinedRef.current && httpPlayerIdRef.current && lobbyId) {
+        if (ENABLE_HTTP_FALLBACK && httpJoinedRef.current && httpPlayerIdRef.current && lobbyId) {
           const pid = httpPlayerIdRef.current
           httpJoinedRef.current = false
           httpPlayerIdRef.current = null
