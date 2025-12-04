@@ -93,12 +93,17 @@ const socketToMatch = new Map<string, string>() // map socket.id -> matchId
 const socketToLobby = new Map<string, LobbyId>()
 
 const supabase = getSupabaseAdmin()
+const TRACK_LOBBY_PRESENCE = process.env.TRACK_LOBBY_PRESENCE === 'true'
 const logger = pino({ name: 'sumo-socket', level: process.env.LOG_LEVEL || 'info' })
 const MAX_PAYMENT_ATTEMPTS = 5
 const MATCH_ELIMINATION_Y = -5
 
 function fireAndForget<T>(promise: Promise<T>, context: string, meta?: Record<string, any>) {
   promise.catch((err) => logger.error({ err, context, ...meta }, 'Async task failed'))
+}
+
+if (!TRACK_LOBBY_PRESENCE) {
+  logger.info('Supabase lobby presence tracking disabled')
 }
 
 async function ensureSeedLobbies() {
@@ -117,7 +122,7 @@ async function ensureSeedLobbies() {
 }
 
 async function upsertLobbyPlayerRecord(lobbyId: LobbyId, player: PlayerState) {
-  if (player.isAi) return
+  if (!TRACK_LOBBY_PRESENCE || player.isAi) return
   try {
     await supabase
       .from('lobby_players')
@@ -180,7 +185,7 @@ async function updateLobbyPlayerWager(lobbyId: LobbyId, wallet: Wallet, amount: 
 }
 
 async function removeLobbyPlayerRecord(lobbyId: LobbyId, wallet: Wallet) {
-  if (wallet.startsWith('ai-')) return
+  if (!TRACK_LOBBY_PRESENCE || wallet.startsWith('ai-')) return
   try {
     await supabase
       .from('lobby_players')
@@ -193,6 +198,7 @@ async function removeLobbyPlayerRecord(lobbyId: LobbyId, wallet: Wallet) {
 }
 
 async function clearLobbyPlayersRecord(lobbyId: LobbyId) {
+  if (!TRACK_LOBBY_PRESENCE) return
   try {
     await supabase
       .from('lobby_players')
@@ -204,6 +210,7 @@ async function clearLobbyPlayersRecord(lobbyId: LobbyId) {
 }
 
 async function syncLobbyPlayerCountDb(lobbyId: LobbyId) {
+  if (!TRACK_LOBBY_PRESENCE) return
   try {
     const { count, error } = await supabase
       .from('lobby_players')
@@ -234,6 +241,7 @@ async function updateLobbyStatusDb(lobbyId: LobbyId, status: string) {
 ensureSeedLobbies().catch((error) => console.error('[supabase] Seed error', error))
 
 async function resetLobbyPlayers() {
+  if (!TRACK_LOBBY_PRESENCE) return
   try {
     await supabase
       .from('lobby_players')
