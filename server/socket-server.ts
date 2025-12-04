@@ -97,6 +97,10 @@ const logger = pino({ name: 'sumo-socket', level: process.env.LOG_LEVEL || 'info
 const MAX_PAYMENT_ATTEMPTS = 5
 const MATCH_ELIMINATION_Y = -5
 
+function fireAndForget<T>(promise: Promise<T>, context: string, meta?: Record<string, any>) {
+  promise.catch((err) => logger.error({ err, context, ...meta }, 'Async task failed'))
+}
+
 async function ensureSeedLobbies() {
   try {
     const records = HARDCODED_LOBBIES.map((l) => ({
@@ -529,7 +533,7 @@ function clearCountdown(lobby: LobbyState) {
   if (lobby.countdownTimer) clearInterval(lobby.countdownTimer)
   lobby.countdownTimer = undefined
   lobby.countdown = null
-  void updateLobbyStatusDb(lobby.id, 'open')
+  fireAndForget(updateLobbyStatusDb(lobby.id, 'open'), 'updateLobbyStatusDb', { lobbyId: lobby.id, status: 'open' })
 }
 
 function tryStartCountdown(lobby: LobbyState) {
@@ -544,7 +548,7 @@ function tryStartCountdown(lobby: LobbyState) {
   if (readyCount >= majority && allWagered) {
     lobby.countdown = 5
     broadcastLobby(lobby)
-    void updateLobbyStatusDb(lobby.id, 'countdown')
+    fireAndForget(updateLobbyStatusDb(lobby.id, 'countdown'), 'updateLobbyStatusDb', { lobbyId: lobby.id, status: 'countdown' })
     lobby.countdownTimer = setInterval(() => {
       // Auto-kick unready/unwagered during countdown (refund paid-but-unready)
       for (const [wallet, p] of lobby.players.entries()) {
@@ -565,10 +569,10 @@ function tryStartCountdown(lobby: LobbyState) {
             }
           }
           lobby.players.delete(wallet)
-          void removeLobbyPlayerRecord(lobby.id, wallet)
+          fireAndForget(removeLobbyPlayerRecord(lobby.id, wallet), 'removeLobbyPlayerRecord', { lobbyId: lobby.id, wallet })
         }
       }
-      void syncLobbyPlayerCountDb(lobby.id)
+      fireAndForget(syncLobbyPlayerCountDb(lobby.id), 'syncLobbyPlayerCountDb', { lobbyId: lobby.id })
       if (lobby.players.size === 0) {
         clearCountdown(lobby)
         broadcastLobby(lobby)
@@ -645,7 +649,7 @@ function startMatch(lobby: LobbyState) {
   const gameMode = HARDCODED_LOBBIES.find((h) => h.id === lobby.id)?.gameMode ?? 'SMALL_SUMO'
   metrics.matchesStarted += 1
   logger.info({ lobbyId: lobby.id, matchId, seed, gameMode }, 'Match started')
-  void recordMatchStart(matchId, lobby.id, gameMode, seed, snapshot.roster ?? [])
+  fireAndForget(recordMatchStart(matchId, lobby.id, gameMode, seed, snapshot.roster ?? []), 'recordMatchStart', { lobbyId: lobby.id, matchId })
 
   const payload: GameStartPacket = {
     matchId,
@@ -666,11 +670,11 @@ function startMatch(lobby: LobbyState) {
 
   // Reset lobby after match start (or move to active match tracking)
   lobby.players.clear()
-  void clearLobbyPlayersRecord(lobby.id)
-  void syncLobbyPlayerCountDb(lobby.id)
+  fireAndForget(clearLobbyPlayersRecord(lobby.id), 'clearLobbyPlayersRecord', { lobbyId: lobby.id })
+  fireAndForget(syncLobbyPlayerCountDb(lobby.id), 'syncLobbyPlayerCountDb', { lobbyId: lobby.id })
   clearCountdown(lobby)
   broadcastLobby(lobby)
-  void updateLobbyStatusDb(lobby.id, 'in_match')
+  fireAndForget(updateLobbyStatusDb(lobby.id, 'in_match'), 'updateLobbyStatusDb', { lobbyId: lobby.id, status: 'in_match' })
 }
 
 io.on('connection', (socket) => {
@@ -716,9 +720,9 @@ io.on('connection', (socket) => {
         lobby.players.set(data.wallet, playerState)
         socketToLobby.set(socket.id, lobby.id)
         ;(socket.data as any).wallet = data.wallet
-        await upsertLobbyPlayerRecord(lobby.id, playerState)
-        await syncLobbyPlayerCountDb(lobby.id)
         broadcastLobby(lobby)
+        fireAndForget(upsertLobbyPlayerRecord(lobby.id, playerState), 'upsertLobbyPlayerRecord', { lobbyId: lobby.id, wallet: data.wallet })
+        fireAndForget(syncLobbyPlayerCountDb(lobby.id), 'syncLobbyPlayerCountDb', { lobbyId: lobby.id })
         metrics.lobbyJoins += 1
         logger.info({ lobbyId: lobby.id, wallet: data.wallet }, 'Player joined lobby')
       }
@@ -782,7 +786,7 @@ io.on('connection', (socket) => {
             logger.info({ lobbyId: lobby.id, wallet: player.wallet, escrow: keys[escrowIndex], wager: lobby.wager }, 'Wager verified')
 
             broadcastLobby(lobby)
-            await updateLobbyPlayerWager(lobby.id, player.wallet, lobby.wager, true, signature)
+            fireAndForget(updateLobbyPlayerWager(lobby.id, player.wallet, lobby.wager, true, signature), 'updateLobbyPlayerWager', { lobbyId: lobby.id, wallet: player.wallet })
             metrics.wagersLocked += 1
             tryStartCountdown(lobby)
           } catch (e: any) {
@@ -802,7 +806,7 @@ io.on('connection', (socket) => {
         }
         player.ready = data.ready
         broadcastLobby(lobby)
-        await updateLobbyPlayerReady(lobby.id, player.wallet, player.ready)
+        fireAndForget(updateLobbyPlayerReady(lobby.id, player.wallet, player.ready), 'updateLobbyPlayerReady', { lobbyId: lobby.id, wallet: player.wallet, ready: player.ready })
         logger.info({ lobbyId: lobby.id, wallet: player.wallet, ready: player.ready }, 'Player ready state')
         // For free lobbies, if at least one human ready and not enough players, schedule AI fill after 10s
         if (lobby.wager === 0) {
@@ -883,11 +887,11 @@ io.on('connection', (socket) => {
             }
             lobby.players.delete(wallet)
             socketToLobby.delete(socket.id)
-            await removeLobbyPlayerRecord(lobby.id, wallet)
+            fireAndForget(removeLobbyPlayerRecord(lobby.id, wallet), 'removeLobbyPlayerRecord', { lobbyId: lobby.id, wallet })
           }
         }
         socket.leave(lobby.id)
-        await syncLobbyPlayerCountDb(lobby.id)
+        fireAndForget(syncLobbyPlayerCountDb(lobby.id), 'syncLobbyPlayerCountDb', { lobbyId: lobby.id })
         broadcastLobby(lobby)
         metrics.lobbyLeaves += 1
         logger.info({ lobbyId: lobby.id, wallet: p.wallet }, 'Player left lobby')
@@ -939,7 +943,7 @@ io.on('connection', (socket) => {
     } catch {}
   })
 
-  socket.on('disconnect', async () => {
+  socket.on('disconnect', () => {
     // Remove player from any lobby
     for (const lobby of lobbies.values()) {
       let changed = false
@@ -947,11 +951,11 @@ io.on('connection', (socket) => {
         if (p.socketId === socket.id) {
           lobby.players.delete(wallet)
           changed = true
-          await removeLobbyPlayerRecord(lobby.id, wallet)
+          fireAndForget(removeLobbyPlayerRecord(lobby.id, wallet), 'removeLobbyPlayerRecord', { lobbyId: lobby.id, wallet })
         }
       }
       if (changed) {
-        await syncLobbyPlayerCountDb(lobby.id)
+        fireAndForget(syncLobbyPlayerCountDb(lobby.id), 'syncLobbyPlayerCountDb', { lobbyId: lobby.id })
         broadcastLobby(lobby)
         metrics.lobbyLeaves += 1
         logger.info({ lobbyId: lobby.id }, 'Player disconnected from lobby')
