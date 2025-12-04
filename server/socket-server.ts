@@ -93,7 +93,9 @@ const socketToMatch = new Map<string, string>() // map socket.id -> matchId
 const socketToLobby = new Map<string, LobbyId>()
 
 const supabase = getSupabaseAdmin()
-const TRACK_LOBBY_PRESENCE = process.env.TRACK_LOBBY_PRESENCE === 'true'
+const TRACK_LOBBY_PRESENCE =
+  process.env.TRACK_LOBBY_PRESENCE === 'true' ||
+  process.env.SUPABASE_LOBBY_PERSIST === 'true'
 const logger = pino({ name: 'sumo-socket', level: process.env.LOG_LEVEL || 'info' })
 const MAX_PAYMENT_ATTEMPTS = 5
 const MATCH_ELIMINATION_Y = -5
