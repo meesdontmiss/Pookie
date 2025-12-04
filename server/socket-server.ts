@@ -393,7 +393,53 @@ async function updateWagerEventStatus(txSignature: string, status: string) {
 }
 
 async function enqueuePaymentJob(jobType: 'payout' | 'refund', payload: Record<string, any>) {
-  const { data, error } = await getSupabase()
+  const supa = getSupabase()
+
+  // Best-effort idempotency: use an explicit key when provided,
+  // otherwise derive a stable key for common cases (matchId or txSignatureKey).
+  let idempotencyKey: string | null = null
+  if (typeof payload.idempotencyKey === 'string') {
+    idempotencyKey = payload.idempotencyKey
+  } else if (typeof payload.txSignatureKey === 'string') {
+    idempotencyKey = `${jobType}:tx:${payload.txSignatureKey}`
+  } else if (jobType === 'payout' && typeof payload.matchId === 'string' && typeof payload.escrowPublicKey === 'string') {
+    idempotencyKey = `${jobType}:match:${payload.matchId}:escrow:${payload.escrowPublicKey}`
+  }
+
+  if (idempotencyKey) {
+    // Attach the key into payload for future queries
+    const keyedPayload = { ...payload, idempotencyKey }
+
+    // Check if a job for this key already exists (any status)
+    try {
+      const { data: existing, error: selectError } = await supa
+        .from('payment_jobs')
+        .select('id, status, attempts')
+        .eq('job_type', jobType)
+        .contains('payload', { idempotencyKey })
+        .limit(1)
+
+      if (!selectError && existing && existing.length > 0) {
+        // Reuse existing job id; processor will handle retries if needed
+        return existing[0].id as string
+      }
+    } catch (error) {
+      console.error('[payment_jobs] idempotency check failed', { jobType, idempotencyKey, error })
+      // fall through to insert – worst case we create a duplicate job, but
+      // on-chain idempotency (same tx sig) still protects from double-spend
+    }
+
+    const { data, error } = await supa
+      .from('payment_jobs')
+      .insert({ job_type: jobType, payload: keyedPayload })
+      .select('id')
+      .single()
+    if (error) throw error
+    return data.id as string
+  }
+
+  // No idempotency key available – insert a simple best-effort job
+  const { data, error } = await supa
     .from('payment_jobs')
     .insert({ job_type: jobType, payload })
     .select('id')
