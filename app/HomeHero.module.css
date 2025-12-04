@@ -43,7 +43,7 @@
   width: 500px;
   height: auto;
   filter: drop-shadow(0 6px 18px rgba(0, 200, 255, 0.45));
-  transform: translateY(-84px);
+  transform: translateY(-204px);
   will-change: transform;
 }
 
@@ -53,7 +53,7 @@
   position: fixed;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -10%);
+  transform: translate(-50%, -30%);
   pointer-events: none;
   z-index: 200;
   display: block;
