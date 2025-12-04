@@ -92,7 +92,10 @@ const processedRefunds = new Set<string>() // track by txSignature to avoid dupl
 const socketToMatch = new Map<string, string>() // map socket.id -> matchId
 const socketToLobby = new Map<string, LobbyId>()
 
-const supabase = getSupabaseAdmin()
+// Lazy getter for Supabase to avoid loading env vars at module init time
+function getSupabase() {
+  return getSupabaseAdmin()
+}
 const TRACK_LOBBY_PRESENCE =
   process.env.TRACK_LOBBY_PRESENCE === 'true' ||
   process.env.SUPABASE_LOBBY_PERSIST === 'true'
@@ -117,7 +120,7 @@ async function ensureSeedLobbies() {
       max_players: l.capacity,
       status: 'open',
     }))
-    await supabase.from('lobbies').upsert(records, { onConflict: 'id' })
+    await getSupabase().from('lobbies').upsert(records, { onConflict: 'id' })
   } catch (error) {
     logger.error({ err: error }, 'Failed to seed lobbies')
   }
