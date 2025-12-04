@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "start:server": "node -r ts-node/register/transpile-only server/socket-server.ts",
+    "start:server": "tsx server/socket-server.ts",
     "prepare-text-generation": "node ./scripts/prepare-text-generation.js",
     "db:generate": "drizzle-kit generate",
     "stress": "node scripts/stress-test.js"
