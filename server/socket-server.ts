@@ -299,6 +299,141 @@ async function recordMatchResult(matchId: MatchId, status: 'completed' | 'cancel
   }
 }
 
+/**
+ * Refund helper for stale / cancelled matches:
+ * For a given lobby, find all locked wagers in wager_events and enqueue refunds.
+ * We recompute the escrow address per tx via getTransactionDetails + EscrowService.getAllWallets,
+ * similar to the confirm_wager handler, so we don't need to have persisted escrow per match.
+ */
+async function refundLockedWagersForLobby(lobbyId: LobbyId, reason: string) {
+  const supa = getSupabase()
+  try {
+    const { data: locked, error } = await supa
+      .from('wager_events')
+      .select('wallet_address, amount, tx_signature, status')
+      .eq('lobby_id', lobbyId)
+      .in('status', ['locked'])
+
+    if (error) {
+      logger.error({ lobbyId, err: error }, 'Failed to load locked wagers for lobby')
+      return
+    }
+    if (!locked || locked.length === 0) return
+
+    const { walletA, walletB } = await EscrowService.getAllWallets()
+    const escrowCandidates = new Set([walletA, walletB].filter(Boolean))
+
+    for (const row of locked) {
+      const wallet = String(row.wallet_address || '').toLowerCase()
+      const signature = String(row.tx_signature || '')
+      const amountSol = Number(row.amount || 0)
+      if (!wallet || !signature || amountSol <= 0) continue
+
+      try {
+        const tx = await getTransactionDetails(signature)
+        if (!tx || !tx.meta || !tx.transaction) {
+          logger.warn({ lobbyId, wallet, signature }, 'Stale wager tx not found; skipping refund enqueue')
+          continue
+        }
+        const keys = tx.transaction.message.accountKeys.map((k: any) =>
+          typeof k === 'string' ? k : k.pubkey?.toString?.() || String(k),
+        )
+        const pre = tx.meta.preBalances
+        const post = tx.meta.postBalances
+
+        const playerIndex = keys.findIndex(
+          (k: string) => k && k.toLowerCase() === wallet.toLowerCase(),
+        )
+        const escrowIndex = keys.findIndex((k: string) => escrowCandidates.has(k))
+
+        if (playerIndex === -1 || escrowIndex === -1) {
+          logger.warn(
+            { lobbyId, wallet, signature },
+            'Stale wager tx participants mismatch; skipping refund enqueue',
+          )
+          continue
+        }
+
+        const escrowDelta = post[escrowIndex] - pre[escrowIndex]
+        const expectedLamports = solToLamports(amountSol)
+        if (escrowDelta !== expectedLamports) {
+          logger.warn(
+            { lobbyId, wallet, signature, escrowDelta, expectedLamports },
+            'Stale wager amount mismatch; skipping refund enqueue',
+          )
+          continue
+        }
+
+        const escrowPublicKey = keys[escrowIndex]
+
+        // Enqueue idempotent refund job keyed by original tx signature.
+        await enqueuePaymentJob('refund', {
+          escrowPublicKey,
+          playerPublicKey: wallet,
+          amountSol,
+          txSignatureKey: signature,
+          description: reason,
+        })
+        logger.info(
+          { lobbyId, wallet, amountSol, signature },
+          'Refund job enqueued for stale match',
+        )
+      } catch (err: any) {
+        logger.error(
+          { lobbyId, wallet, signature, err },
+          'Failed to enqueue refund for stale wager',
+        )
+      }
+    }
+  } catch (outerErr) {
+    logger.error({ lobbyId, err: outerErr }, 'refundLockedWagersForLobby failed')
+  }
+}
+
+/**
+ * Periodically scan match_state for matches stuck in 'active' for too long.
+ * For such stale matches, mark them cancelled and enqueue refunds for all locked wagers in that lobby.
+ * This covers server restarts or crashes that occur mid-match before a winner is recorded.
+ */
+async function reconcileStaleMatchesOnce() {
+  const supa = getSupabase()
+  // Allow tuning via env; default 20 minutes.
+  const timeoutMinutes = Number(process.env.STALE_MATCH_TIMEOUT_MINUTES ?? '20')
+  const now = Date.now()
+  const cutoffIso = new Date(now - timeoutMinutes * 60 * 1000).toISOString()
+
+  try {
+    const { data: rows, error } = await supa
+      .from('match_state')
+      .select('id,lobby_id,status,started_at')
+      .eq('status', 'active')
+      .lt('started_at', cutoffIso)
+      .limit(50)
+
+    if (error) {
+      logger.error({ err: error }, 'Failed to query stale matches')
+      return
+    }
+    if (!rows || rows.length === 0) return
+
+    for (const row of rows) {
+      const matchId = String(row.id)
+      const lobbyId = String(row.lobby_id)
+      logger.warn(
+        { matchId, lobbyId, started_at: row.started_at, timeoutMinutes },
+        'Found stale active match; cancelling and refunding',
+      )
+      await refundLockedWagersForLobby(
+        lobbyId,
+        'Auto-refund: match timeout or server restart',
+      )
+      await recordMatchResult(matchId as MatchId, 'cancelled', undefined)
+    }
+  } catch (err) {
+    logger.error({ err }, 'reconcileStaleMatchesOnce failed')
+  }
+}
+
 function getAlivePlayers(match: ActiveMatch) {
   const roster = match.roster ?? []
   return roster.filter((p) => !match.eliminated.has(p.wallet))
@@ -559,6 +694,13 @@ setInterval(() => {
   processPaymentJobsOnce().catch((error) => console.error('[payment-jobs] loop error', error))
 }, 3000)
 
+// Periodically reconcile stale matches that never finished cleanly (e.g., server crash mid-match)
+setInterval(() => {
+  reconcileStaleMatchesOnce().catch((error) =>
+    console.error('[stale-matches] reconcile loop error', error),
+  )
+}, (Number(process.env.STALE_MATCH_RECONCILE_INTERVAL_MS ?? '60000') || 60000))
+
 
 // Build in-memory lobbies from hardcoded list
 const lobbies = new Map<LobbyId, LobbyState>()
@@ -610,6 +752,21 @@ function tryStartCountdown(lobby: LobbyState) {
   const readyCount = players.filter((p) => p.ready).length
   const majority = Math.ceil(players.length / 2)
   const allWagered = lobby.wager === 0 ? true : players.every((p) => p.wagerLocked)
+
+  // Free lobbies: if at least one human is ready but there are still
+  // empty slots, defer starting the countdown. The existing aiFillTimer
+  // + fillAiPlayers(lobby) logic (triggered from set_ready) will first
+  // populate AI players, broadcast them into the lobby UI, and then call
+  // tryStartCountdown again. At that point, players.length will be at
+  // or near capacity and we allow the normal majority/allWagered check
+  // to start the 5-second countdown.
+  if (lobby.wager === 0) {
+    const humansReady = players.filter((p) => !p.isAi && p.ready).length
+    const hasEmptySlots = players.length < lobby.capacity
+    if (humansReady >= 1 && hasEmptySlots) {
+      return
+    }
+  }
 
   if (readyCount >= majority && allWagered) {
     lobby.countdown = 5

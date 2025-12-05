@@ -1271,9 +1271,35 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
     // Example: if (internalGameState === 'ACTIVE') { ... }
   }, [internalGameState]); // Add internalGameState if decisions depend on it
 
-  // In render, pass the correct state to GameStatusUI
+  // In render, ensure all R3F hook users live inside a <Canvas>,
+  // with HUD / status UI overlaid via normal DOM.
   return (
-    <>
+    <div style={{ width: '100vw', height: '100vh', position: 'relative', background: '#020617' }}>
+      <Canvas
+        shadows
+        camera={{ position: [0, 25, 45], fov: 50 }}
+      >
+        <ambientLight intensity={0.6} />
+        <directionalLight position={[10, 20, 5]} intensity={1.0} castShadow />
+
+        {/* Basic arena so the scene is not empty; expand with additional assets as needed. */}
+        <Physics gravity={[0, -9.81, 0]}>
+          <ArenaPlatform />
+          {/* Remote / local players and other dynamic entities can be added here using
+              Player / OtherPlayer once that logic is finalized. */}
+        </Physics>
+
+        {socket && (
+          <SpectatorCameraHandler
+            isSpectatorCamActive={isSpectatorCamActive || localPlayerGameStatus !== 'InGame'}
+            spectatedPlayerId={spectatedPlayerId}
+            remotePlayerEntities={remotePlayerEntities}
+            livePlayersForHUD={livePlayersForHUD}
+            onSetSpectatedPlayerId={setSpectatedPlayerId}
+          />
+        )}
+      </Canvas>
+
       <GameStatusUI
         gameState={internalGameState}
         winnerInfo={winnerInfo}
@@ -1282,15 +1308,6 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
         localPlayerGameStatus={localPlayerGameStatus}
         onMatchComplete={onMatchComplete}
       />
-      {socket && (
-        <SpectatorCameraHandler
-          isSpectatorCamActive={isSpectatorCamActive || localPlayerGameStatus !== 'InGame'}
-          spectatedPlayerId={spectatedPlayerId}
-          remotePlayerEntities={remotePlayerEntities}
-          livePlayersForHUD={livePlayersForHUD}
-          onSetSpectatedPlayerId={setSpectatedPlayerId}
-        />
-      )}
       <GameHUD
         players={livePlayersForHUD}
         onPlayerNameClick={(id) => setSpectatedPlayerId(id)}
@@ -1311,9 +1328,9 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
           setSpectatedPlayerId(next.id)
         }}
       />
-      {/* Canvas + physics would render below */}
-    </>
+    </div>
   );
-};
+}
+;
 
 export default SumoArenaScene; 
