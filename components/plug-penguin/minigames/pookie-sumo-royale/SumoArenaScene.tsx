@@ -524,7 +524,7 @@ const OtherPlayer: React.FC<OtherPlayerProps> = React.memo(({
   const emissiveColor = useMemo(() => new THREE.Color(ballColor).multiplyScalar(0.5), [ballColor]);
 
   useFrame((_, delta) => {
-    if (!rigidBodyRef.current || !visible) return;
+    if (!rigidBodyRef.current || !visible || !targetPosition || !targetRotation) return;
 
     const currentPositionVec = rigidBodyRef.current.translation();
     const targetPositionVec = new THREE.Vector3(...targetPosition);
@@ -1379,6 +1379,7 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
           {/* Remote players driven by server state */}
           {Object.values(remotePlayerEntities)
             .filter((p) => !localPlayerId || p.id !== localPlayerId)
+            .filter((p) => p.position && p.quaternion) // Only render players with valid position/rotation
             .map((p) => (
               <OtherPlayer
                 key={p.id}
