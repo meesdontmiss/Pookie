@@ -1249,18 +1249,42 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
     };
 
     socket.on('gameStatusUpdate', handleGameStatusUpdate);
+    
+    // Real-time player movement updates (10Hz from other clients)
+    socket.on('playerStateUpdate', ({ playerId, position, rotation }: { playerId: string; position: [number, number, number]; rotation: [number, number, number, number] }) => {
+      setRemotePlayerEntities((prev) => {
+        const existing = prev[playerId]
+        if (!existing) return prev // Only update known players
+        return {
+          ...prev,
+          [playerId]: {
+            ...existing,
+            position: { x: position[0], y: position[1], z: position[2] },
+            quaternion: { x: rotation[0], y: rotation[1], z: rotation[2], w: rotation[3] },
+          },
+        }
+      })
+    })
+    
     socket.on('player_eliminated', ({ playerId }) => {
       setLivePlayersForHUD((prev) =>
         prev.map((p) => (p.id === playerId ? { ...p, status: 'Out' } : p)),
       )
+      // Play elimination sound
+      const eliminationSound = new Howl({ src: ['/sounds/knock_out_vox.mp3'], volume: 0.5 });
+      eliminationSound.play();
     })
     socket.on('match_finished', ({ winner }) => {
       if (winner) {
         setWinnerInfo({ username: winner })
+        // Play victory sound
+        const victorySound = new Howl({ src: ['/sounds/YOU DID IT POOKIE.mp3'], volume: 0.7 });
+        victorySound.play();
       }
     })
     return () => {
       socket.off('gameStatusUpdate', handleGameStatusUpdate);
+      socket.off('playerStateUpdate')
       socket.off('player_eliminated')
       socket.off('match_finished')
     };
@@ -1273,6 +1297,11 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
     if (internalGameState !== 'WAITING') return;
     setInternalGameState('STARTING_COUNTDOWN');
     setCountdownUIDisplay(3);
+    
+    // Play countdown sound
+    const countdownSound = new Howl({ src: ['/sounds/ready set GO.mp3'], volume: 0.6 });
+    countdownSound.play();
+    
     let remaining = 3;
     const timer = window.setInterval(() => {
       remaining -= 1;
@@ -1286,6 +1315,7 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
     }, 1000);
     return () => {
       window.clearInterval(timer);
+      countdownSound.unload();
     };
   }, [socket, internalGameState]);
 

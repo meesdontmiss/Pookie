@@ -1226,9 +1226,49 @@ const PORT = process.env.PORT || 4001
 app.get('/health', (_req, res) => res.json({ ok: true, metrics }))
 server.listen(PORT, () => logger.info({ port: PORT }, 'sumo socket listening'))
 
+// AI movement logic
+function updateAIPlayers(match: MatchState) {
+  const platformRadius = 20
+  const platformHeight = 4
+  const aiPlayers = (match.roster || []).filter((r) => r.isAi)
+  
+  for (const aiPlayer of aiPlayers) {
+    const state = match.playerStates.get(aiPlayer.wallet)
+    if (!state || state.status !== 'In') continue
+    
+    const [x, y, z] = state.position
+    const distanceFromCenter = Math.sqrt(x * x + z * z)
+    
+    // If AI is too close to edge, move toward center
+    if (distanceFromCenter > platformRadius * 0.7) {
+      const angleToCenter = Math.atan2(-z, -x)
+      state.position[0] += Math.cos(angleToCenter) * 0.15
+      state.position[2] += Math.sin(angleToCenter) * 0.15
+    } else {
+      // Random walk with slight bias toward center
+      const randomAngle = Math.random() * Math.PI * 2
+      const moveSpeed = 0.08 + Math.random() * 0.04
+      state.position[0] += Math.cos(randomAngle) * moveSpeed
+      state.position[2] += Math.sin(randomAngle) * moveSpeed
+      
+      // Slight pull toward center to prevent edge camping
+      const pullStrength = 0.02
+      state.position[0] -= x * pullStrength
+      state.position[2] -= z * pullStrength
+    }
+    
+    // Keep Y at platform level
+    state.position[1] = platformHeight / 2 + 1.2
+    state.updatedAt = Date.now()
+  }
+}
+
 const MATCH_TICK_INTERVAL_MS = 1000
 setInterval(() => {
   for (const [matchId, match] of activeMatches.entries()) {
+    // Update AI positions
+    updateAIPlayers(match)
+    
     const elapsedSeconds = Math.floor((Date.now() - (match.startedAt || Date.now())) / 1000)
     const playersPayload = Array.from(match.playerStates.entries()).map(([id, state]) => ({
       id,
