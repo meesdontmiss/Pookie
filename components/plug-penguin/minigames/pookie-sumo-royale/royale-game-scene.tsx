@@ -89,7 +89,7 @@ const RoyaleGameScene: React.FC<RoyaleGameSceneProps> = ({ lobbyId, isPractice }
     try {
       const isProd = process.env.NODE_ENV === 'production';
       const url = process.env.NEXT_PUBLIC_SOCKET_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:4001');
-      const path = process.env.NEXT_PUBLIC_SOCKET_PATH || '/socket.io';
+      const path = process.env.NEXT_PUBLIC_SOCKET_PATH || '/api/socketio'; // Match Cock Combat path
       const transports = isProd ? ['websocket'] : ['polling','websocket'];
       const s = io(url, { path, transports, addTrailingSlash: false, withCredentials: true, autoConnect: true });
       const id = publicKey?.toBase58?.() || '';

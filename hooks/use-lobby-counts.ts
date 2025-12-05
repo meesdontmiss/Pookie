@@ -24,7 +24,7 @@ export function useLobbyCounts() {
     const transports = isProd ? ['websocket'] : ['polling', 'websocket']
 
     const s = io(socketUrl, {
-      path: process.env.NEXT_PUBLIC_SOCKET_PATH || '/socket.io',
+      path: process.env.NEXT_PUBLIC_SOCKET_PATH || '/api/socketio', // Match Cock Combat path
       transports,
       reconnection: true,
       reconnectionAttempts: 5,
