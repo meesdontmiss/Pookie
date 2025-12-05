@@ -140,6 +140,7 @@ const Player = React.memo(React.forwardRef<any, PlayerProps>((
   const pookieModelPositionOffset = new THREE.Vector3(0, -playerRadius * 0.65, 0);
   const hasFallenOff = useRef(false);
   const isLocalPlayerInstance = !!onPushAction; // Determine if this is the local player
+  const emissiveColor = ballColor; // Use the ball color for emissive glow
 
   // REMOVED the useEffect for initial camera positioning based on initialYawAngle
 
@@ -351,23 +352,9 @@ const Player = React.memo(React.forwardRef<any, PlayerProps>((
       
       const playerPosition = rigidBody.translation(); 
       
-      // --- TEMPORARY SIMPLIFIED CAMERA ---
-      const simpleOffset = new THREE.Vector3(10, 5, 0); // User preferred this angle for viewing
-      const cameraPosition = new THREE.Vector3(
-        playerPosition.x + simpleOffset.x,
-        playerPosition.y + simpleOffset.y,
-        playerPosition.z + simpleOffset.z
-      );
-      const lookAtPosition = new THREE.Vector3(playerPosition.x, playerPosition.y, playerPosition.z);
-
-      // Directly set camera, bypassing smoothing for this test
-      state.camera.position.copy(cameraPosition);
-      state.camera.lookAt(lookAtPosition);
-      // --- END TEMPORARY SIMPLIFIED CAMERA ---
-
-      /* // Original more complex camera logic - commented out again
+      // Third-person camera: behind and above the player
       const playerRotation = rigidBody.rotation();
-      const desiredOffset = new THREE.Vector3(0, 2.5, -7); 
+      const desiredOffset = new THREE.Vector3(0, 3.5, 8); // Behind (Z), above (Y)
       const threePlayerRotation = new THREE.Quaternion(playerRotation.x, playerRotation.y, playerRotation.z, playerRotation.w);
       const cameraOffset = desiredOffset.clone().applyQuaternion(threePlayerRotation);
       const idealCameraPosition = new THREE.Vector3(
@@ -377,16 +364,12 @@ const Player = React.memo(React.forwardRef<any, PlayerProps>((
       );
       const idealLookAt = new THREE.Vector3(playerPosition.x, playerPosition.y + 0.5, playerPosition.z);
 
-      smoothedCameraPosition.lerp(idealCameraPosition, 5 * delta);
-      smoothedCameraTarget.lerp(idealLookAt, 5 * delta);
+      // Smooth camera movement
+      smoothedCameraPosition.lerp(idealCameraPosition, 8 * delta);
+      smoothedCameraTarget.lerp(idealLookAt, 8 * delta);
 
-    state.camera.position.copy(smoothedCameraPosition);
-    state.camera.lookAt(smoothedCameraTarget);
-      */
-    } else {
-      if (isLocalPlayerInstance) {
-          console.log(`[Player LOCAL] Camera logic SKIPPED. onPushAction: ${!!onPushAction}, isSpectatingOrEliminated (ignored by temp override): ${isSpectatingOrEliminated}`);
-      }
+      state.camera.position.copy(smoothedCameraPosition);
+      state.camera.lookAt(smoothedCameraTarget);
     }
   }); // End of useFrame
 
@@ -1363,11 +1346,11 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
         >
           <color attach="background" args={['#020617']} />
           <ambientLight intensity={0.6} />
-          <directionalLight position={[10, 20, 5]} intensity={1.0} castShadow />
-          {/* HDRI environment + snowfall for atmosphere */}
-          {/* Reuse the cinematic lobby HDRI for consistency */}
-          <Environment files="/HDRI/passendorf_snow_1k.hdr" background={false} />
-          <FallingSnow count={600} radius={70} speed={0.25} />
+        <directionalLight position={[10, 20, 5]} intensity={1.0} castShadow />
+        {/* HDRI environment + snowfall for atmosphere */}
+        {/* Reuse the cinematic lobby HDRI for consistency */}
+        <Environment files="/HDRI/passendorf_snow_1k.hdr" background />
+        <FallingSnow count={600} radius={70} speed={0.25} />
 
           <Physics gravity={[0, -9.81, 0]}>
           <ArenaPlatform />
