@@ -618,7 +618,9 @@ function tryStartCountdown(lobby: LobbyState) {
     lobby.countdownTimer = setInterval(() => {
       // Auto-kick unready/unwagered during countdown (refund paid-but-unready)
       for (const [wallet, p] of lobby.players.entries()) {
-        if (!p.ready || !p.wagerLocked) {
+        // For paid lobbies, check both ready and wagerLocked; for free lobbies, only check ready
+        const shouldKick = lobby.wager === 0 ? !p.ready : (!p.ready || !p.wagerLocked)
+        if (shouldKick) {
           if (lobby.wager > 0 && p.wagerLocked && p.escrowAddress && p.wagerAmountSol) {
             const sigKey = p.txSignature || `${wallet}-${lobby.id}`
             if (sigKey && !processedRefunds.has(sigKey)) {
@@ -782,7 +784,14 @@ io.on('connection', (socket) => {
         if (lobby.players.size >= lobby.capacity) return socket.emit('message', { type: 'error', message: 'Lobby full', code: 'ERR_LOBBY_FULL' } as ServerToClient)
         // Join room and add/replace state
         await socket.join(lobby.id)
-        const playerState: PlayerState = { socketId: socket.id, wallet: data.wallet, username: data.username, ready: false, wagerLocked: false }
+        // For free lobbies, auto-lock wager (no wager needed)
+        const playerState: PlayerState = { 
+          socketId: socket.id, 
+          wallet: data.wallet, 
+          username: data.username, 
+          ready: false, 
+          wagerLocked: lobby.wager === 0 // Auto-lock for free lobbies
+        }
         lobby.players.set(data.wallet, playerState)
         socketToLobby.set(socket.id, lobby.id)
         ;(socket.data as any).wallet = data.wallet
@@ -790,7 +799,7 @@ io.on('connection', (socket) => {
         fireAndForget(upsertLobbyPlayerRecord(lobby.id, playerState), 'upsertLobbyPlayerRecord', { lobbyId: lobby.id, wallet: data.wallet })
         fireAndForget(syncLobbyPlayerCountDb(lobby.id), 'syncLobbyPlayerCountDb', { lobbyId: lobby.id })
         metrics.lobbyJoins += 1
-        logger.info({ lobbyId: lobby.id, wallet: data.wallet }, 'Player joined lobby')
+        logger.info({ lobbyId: lobby.id, wallet: data.wallet, wagerLocked: playerState.wagerLocked }, 'Player joined lobby')
       }
       if (data.type === 'confirm_wager') {
         const lobby = lobbies.get(data.lobbyId); if (!lobby) return
