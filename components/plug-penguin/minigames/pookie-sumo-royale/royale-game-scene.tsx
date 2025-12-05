@@ -160,14 +160,14 @@ const RoyaleGameScene: React.FC<RoyaleGameSceneProps> = ({ lobbyId, isPractice }
           We might want a loading overlay here until gameStaticDetails are fetched 
           and SumoArenaScene is ready to render or has established its connection.
         */}
-        {gameStaticDetails && (
+        {gameStaticDetails && socket && (
              <SumoArenaScene 
                 lobbyId={lobbyId} 
                 isPractice={isPractice} 
                 playerWalletAddress={(publicKey?.toBase58?.() as string) || localUsername || ''} // local id
                 socket={socket}
                 localUsername={localUsername}
-                gameState={'ACTIVE' as any}
+                gameState={'WAITING' as any}
                 // gameDetails={gameStaticDetails} // Pass fetched details if SumoArenaScene needs them
                 onMatchComplete={handleMatchComplete} 
                 // It's assumed SumoArenaScene will handle its own socket for game state sync

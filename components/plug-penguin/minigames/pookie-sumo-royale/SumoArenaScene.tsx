@@ -51,6 +51,7 @@ interface PlayerProps {
   socket: Socket | null; // Socket for sending updates
   isSpectatingOrEliminated: boolean; // To disable controls if player is out or game ended
   onFallenOff: () => void; // Callback when player falls off
+  username: string; // Display name above the player
   initialPosition?: [number, number, number]; // New: For setting initial position
   initialYawAngle?: number; // New: For initial Y-axis rotation (facing direction)
   onPushAction?: (pusherPosition: THREE.Vector3, pusherRef: React.RefObject<any>) => void; // New callback
@@ -111,7 +112,7 @@ interface AIPlayerState {
 
 // Player Component - Now uses React.forwardRef and React.memo
 const Player = React.memo(React.forwardRef<any, PlayerProps>((
-  { ballColor, socket, isSpectatingOrEliminated, onFallenOff, initialPosition, initialYawAngle, onPushAction, platformHeightActual }, 
+  { ballColor, socket, isSpectatingOrEliminated, onFallenOff, username, initialPosition, initialYawAngle, onPushAction, platformHeightActual }, 
   ref // This ref will be attached to the RigidBody
 ) => {
   const { scene: pookieScene } = useGLTF('/models/POOKIE.glb');
@@ -1166,7 +1167,8 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
   // Use initialGameStateFromParent as the initial state, internalGameState for mutable state
   console.log(`!!!!!! [SumoArenaScene] TOP OF COMPONENT. Props -- localUsername: ${localUsername}, socket exists: ${!!socket}, initialGameStateFromParent: ${initialGameStateFromParent}, lobbyId: ${lobbyId}`);
 
-  const [internalGameState, setInternalGameState] = useState<GameState>(initialGameStateFromParent);
+  // Start in WAITING until we receive server updates / local countdown finishes
+  const [internalGameState, setInternalGameState] = useState<GameState>('WAITING');
   // ... (rest of state variables, make sure localPlayerGameStatus is one of them if used in GameStatusUI)
   const [localPlayerGameStatus, setLocalPlayerGameStatus] = useState<'InGame' | 'Eliminated' | 'Spectating'>('InGame');
   const [winnerInfo, setWinnerInfo] = useState<{ username: string; score?: number } | null>(null); // Ensure score is here
@@ -1175,22 +1177,27 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
   const [livePlayersForHUD, setLivePlayersForHUD] = useState<LivePlayer[]>([]);
   const [spectatedPlayerId, setSpectatedPlayerId] = useState<string | null>(null);
   const [isSpectatorCamActive, setIsSpectatorCamActive] = useState(false);
+  const localPlayerId = useMemo(
+    () => playerWalletAddress || localUsername || '',
+    [playerWalletAddress, localUsername],
+  );
+  const localDisplayName = useMemo(() => {
+    if (localUsername && localUsername.trim().length > 0) return localUsername;
+    if (playerWalletAddress) {
+      const w = playerWalletAddress;
+      return w.length > 8 ? `${w.slice(0, 4)}...${w.slice(-4)}` : w;
+    }
+    return 'Player';
+  }, [localUsername, playerWalletAddress]);
 
 
   // Effect to synchronize internalGameState with prop changes, carefully
   useEffect(() => {
     console.log(`[SumoArenaScene EFFECT] initialGameStateFromParent changed to: ${initialGameStateFromParent}. Current internal gameState: ${internalGameState}.`);
     // More robust sync: if the prop changes and it's a "reset" type state, update internal state.
-    if (initialGameStateFromParent === 'WAITING' || initialGameStateFromParent === 'STARTING_COUNTDOWN') {
-        if (internalGameState !== initialGameStateFromParent) {
-            console.log(`[SumoArenaScene EFFECT] Syncing internalGameState to initialGameStateFromParent: ${initialGameStateFromParent}`);
-      setInternalGameState(initialGameStateFromParent);
-        }
-    } else if (initialGameStateFromParent === 'ACTIVE' && internalGameState === 'WAITING') { // e.g. rejoining active game
-        setInternalGameState('ACTIVE');
-    }
+    // We no longer drive state from parent; server + local countdown are authoritative here.
     // Avoid overriding internal progressions like ACTIVE -> ROUND_OVER -> GAME_OVER unless prop explicitly dictates a reset.
-  }, [initialGameStateFromParent]);
+  }, [initialGameStateFromParent, internalGameState]);
 
 
   // Effect for server-driven game state updates
@@ -1200,7 +1207,13 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
     const handleGameStatusUpdate = (payload: GameStatusUpdatePayload) => {
       console.log('[SumoArenaScene] Received gameStatusUpdate from server:', payload);
       if (payload.gameState) {
-        setInternalGameState(payload.gameState); // Server dictates the state
+        setInternalGameState((prev) => {
+          // Keep local countdown state until finished; afterwards trust server.
+          if (prev === 'STARTING_COUNTDOWN' && countdownUIDisplay !== null && countdownUIDisplay > 0) {
+            return prev;
+          }
+          return payload.gameState!;
+        });
       }
       if (payload.winnerInfo) {
         setWinnerInfo({ username: payload.winnerInfo.username, score: payload.winnerInfo.score });
@@ -1253,6 +1266,34 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
     };
   }, [socket, spectatedPlayerId]);
 
+  // Simple local pre-game countdown once scene mounts and socket is ready
+  useEffect(() => {
+    if (!socket) return;
+    // Only trigger once from WAITING
+    if (internalGameState !== 'WAITING') return;
+    setInternalGameState('STARTING_COUNTDOWN');
+    setCountdownUIDisplay(3);
+    let remaining = 3;
+    const timer = window.setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        window.clearInterval(timer);
+        setCountdownUIDisplay(null);
+        setInternalGameState('ACTIVE');
+      } else {
+        setCountdownUIDisplay(remaining);
+      }
+    }, 1000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [socket, internalGameState]);
+
+  const handleLocalFallenOff = useCallback(() => {
+    setLocalPlayerGameStatus('Eliminated');
+    setIsSpectatorCamActive(true);
+  }, []);
+
   // ... (rest of the component, many parts omitted for brevity) ...
   
   // Example of correcting a comparison:
@@ -1279,19 +1320,51 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
         shadows
         camera={{ position: [0, 25, 45], fov: 50 }}
       >
+        <color attach="background" args={['#020617']} />
         <ambientLight intensity={0.6} />
         <directionalLight position={[10, 20, 5]} intensity={1.0} castShadow />
+        {/* HDRI environment + snowfall for atmosphere */}
+        {/* Reuse the cinematic lobby HDRI for consistency */}
+        <Environment files="/HDRI/passendorf_snow_1k.hdr" background={false} />
+        <FallingSnow count={600} radius={70} speed={0.25} />
 
-        {/* Basic arena so the scene is not empty; expand with additional assets as needed. */}
         <Physics gravity={[0, -9.81, 0]}>
           <ArenaPlatform />
-          {/* Remote / local players and other dynamic entities can be added here using
-              Player / OtherPlayer once that logic is finalized. */}
+          {/* Local controllable player */}
+          {socket && localPlayerId && (
+            <Player
+              ref={undefined as any}
+              ballColor="#ff66cc"
+              socket={socket}
+              isSpectatingOrEliminated={localPlayerGameStatus !== 'InGame'}
+              onFallenOff={handleLocalFallenOff}
+              username={localDisplayName}
+              initialPosition={[0, platformHeight / 2 + 1.2, platformRadius * 0.4]}
+              initialYawAngle={0}
+              onPushAction={() => {}}
+              platformHeightActual={platformHeight}
+            />
+          )}
+
+          {/* Remote players driven by server state */}
+          {Object.values(remotePlayerEntities)
+            .filter((p) => !localPlayerId || p.id !== localPlayerId)
+            .map((p) => (
+              <OtherPlayer
+                key={p.id}
+                playerId={p.id}
+                targetPosition={[p.position.x, p.position.y, p.position.z]}
+                targetRotation={[p.quaternion.x, p.quaternion.y, p.quaternion.z, p.quaternion.w]}
+                ballColor="#9ae6ff"
+                username={p.username}
+                visible={p.status === 'In'}
+              />
+            ))}
         </Physics>
 
         {socket && (
           <SpectatorCameraHandler
-            isSpectatorCamActive={isSpectatorCamActive || localPlayerGameStatus !== 'InGame'}
+            isSpectatorCamActive={isSpectatorCamActive}
             spectatedPlayerId={spectatedPlayerId}
             remotePlayerEntities={remotePlayerEntities}
             livePlayersForHUD={livePlayersForHUD}
