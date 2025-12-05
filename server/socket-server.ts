@@ -859,9 +859,19 @@ function startMatch(lobby: LobbyState) {
   }
   snapshot.playerStates = new Map<Wallet, PlayerRuntimeState>()
   snapshot.eliminated = new Set<Wallet>()
-  for (const entry of snapshot.roster ?? []) {
+  const platformRadius = 20
+  const platformHeight = 4
+  const roster = snapshot.roster ?? []
+  for (let i = 0; i < roster.length; i++) {
+    const entry = roster[i]
+    // Spawn players in a circle around the platform edge, facing inward
+    const angle = (i / roster.length) * Math.PI * 2
+    const spawnRadius = platformRadius * 0.6
+    const x = Math.cos(angle) * spawnRadius
+    const z = Math.sin(angle) * spawnRadius
+    const y = platformHeight / 2 + 1.2
     snapshot.playerStates.set(entry.wallet, {
-      position: [0, 0, 0],
+      position: [x, y, z],
       rotation: [0, 0, 0, 1],
       status: 'In',
       updatedAt: Date.now(),
@@ -1144,16 +1154,19 @@ io.on('connection', (socket) => {
       await socket.join(matchId)
       socketToMatch.set(socket.id, matchId)
       const match = activeMatches.get(matchId)!
-      // Minimal status snapshot
+      // Send current player states with actual positions
       socket.emit('gameStatusUpdate', {
         gameState: 'ACTIVE',
-        players: (match.roster || []).map(r => ({
-          id: r.wallet,
-          position: { x: 0, y: 0, z: 0 },
-          quaternion: { x: 0, y: 0, z: 0, w: 1 },
-          username: r.username,
-          status: 'In',
-        })),
+        players: (match.roster || []).map(r => {
+          const state = match.playerStates.get(r.wallet)
+          return {
+            id: r.wallet,
+            position: state ? { x: state.position[0], y: state.position[1], z: state.position[2] } : { x: 0, y: 5, z: 0 },
+            quaternion: state ? { x: state.rotation[0], y: state.rotation[1], z: state.rotation[2], w: state.rotation[3] } : { x: 0, y: 0, z: 0, w: 1 },
+            username: r.username,
+            status: state?.status || 'In',
+          }
+        }),
       })
     } catch {}
   })
