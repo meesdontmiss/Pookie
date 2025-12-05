@@ -324,7 +324,7 @@ async function refundLockedWagersForLobby(lobbyId: LobbyId, reason: string) {
     const escrowCandidates = new Set([walletA, walletB].filter(Boolean))
 
     for (const row of locked) {
-      const wallet = String(row.wallet_address || '').toLowerCase()
+      const wallet = String(row.wallet_address || '')
       const signature = String(row.tx_signature || '')
       const amountSol = Number(row.amount || 0)
       if (!wallet || !signature || amountSol <= 0) continue
@@ -341,9 +341,7 @@ async function refundLockedWagersForLobby(lobbyId: LobbyId, reason: string) {
         const pre = tx.meta.preBalances
         const post = tx.meta.postBalances
 
-        const playerIndex = keys.findIndex(
-          (k: string) => k && k.toLowerCase() === wallet.toLowerCase(),
-        )
+        const playerIndex = keys.findIndex((k: string) => k === wallet)
         const escrowIndex = keys.findIndex((k: string) => escrowCandidates.has(k))
 
         if (playerIndex === -1 || escrowIndex === -1) {
