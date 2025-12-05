@@ -1223,7 +1223,7 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
       if (payload.countdown !== undefined) {
         setCountdownUIDisplay(payload.countdown);
       }
-      if (payload.players && payload.players.length > 0) {
+      if (Array.isArray(payload.players) && payload.players.length > 0) {
         const entities: Record<string, RemotePlayerStateData> = {}
         const hud: LivePlayer[] = payload.players.map((p, idx) => {
           const wallet = p.id

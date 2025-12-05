@@ -164,7 +164,7 @@ const RoyaleGameScene: React.FC<RoyaleGameSceneProps> = ({ lobbyId, isPractice }
              <SumoArenaScene 
                 lobbyId={lobbyId} 
                 isPractice={isPractice} 
-                playerWalletAddress={(publicKey?.toBase58?.() as string) || localUsername || ''} // local id
+                playerWalletAddress={publicKey?.toBase58() || localUsername || 'guest_unknown'} // local id
                 socket={socket}
                 localUsername={localUsername}
                 gameState={'WAITING' as any}
