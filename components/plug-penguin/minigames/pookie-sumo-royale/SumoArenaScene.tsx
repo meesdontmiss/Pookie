@@ -140,7 +140,6 @@ const Player = React.memo(React.forwardRef<any, PlayerProps>((
   const pookieModelPositionOffset = new THREE.Vector3(0, -playerRadius * 0.65, 0);
   const hasFallenOff = useRef(false);
   const isLocalPlayerInstance = !!onPushAction; // Determine if this is the local player
-  const emissiveColor = ballColor; // Use the ball color for emissive glow
 
   // REMOVED the useEffect for initial camera positioning based on initialYawAngle
 
