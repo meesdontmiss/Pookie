@@ -15,10 +15,7 @@ import {
   WalletModalProvider,
 } from '@solana/wallet-adapter-react-ui';
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
-import {
-  PhantomWalletAdapter,
-  SolflareWalletAdapter,
-} from '@solana/wallet-adapter-wallets';
+import { SolflareWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { clusterApiUrl } from '@solana/web3.js';
 
 // Import styles here if they are specific to these providers
@@ -33,7 +30,7 @@ export function ClientProviders({ children }: ClientProvidersProps) {
   const endpoint = useMemo(() => clusterApiUrl(network), [network]);
   const wallets = useMemo(
     () => [
-      new PhantomWalletAdapter(),
+      // Phantom is now provided via Wallet Standard; keep only explicit Solflare adapter here.
       new SolflareWalletAdapter({ network }),
     ],
     [network]
