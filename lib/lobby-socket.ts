@@ -41,20 +41,20 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
     if (!lobbyId) return
     
     const isProd = process.env.NODE_ENV === 'production'
-    const primaryPath = process.env.NEXT_PUBLIC_SOCKET_PATH || '/sumo-socket'
-    const fallbackPath = primaryPath // Use same path for fallback, don't switch to /socket.io
-    const transports: ("websocket" | "polling")[] = ['polling', 'websocket'] // Always try polling first for reliability
+    const primaryPath = process.env.NEXT_PUBLIC_SOCKET_PATH || '/socket.io'
+    const fallbackPath = '/socket.io'
+    const transports: ("websocket" | "polling")[] = isProd ? ['websocket', 'polling'] : ['polling', 'websocket']
 
     let socketInstance = io(urlCandidates[currentUrlIdxRef.current]!, {
       path: primaryPath,
       addTrailingSlash: false,
-      transports, // polling first, then websocket upgrade
+      transports,
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-      timeout: 20000, // Increased timeout for Render cold starts
-      withCredentials: false, // Disable credentials for CORS simplicity
+      timeout: 15000,
+      withCredentials: true,
       autoConnect: true,
     })
 
@@ -239,15 +239,7 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
           } catch {}
           socketInstance = io(nextHost!, {
             path: fallbackPath,
-            addTrailingSlash: false,
-            transports: ['polling', 'websocket'],
-            reconnection: true,
-            reconnectionAttempts: 10,
-            reconnectionDelay: 1000,
-            reconnectionDelayMax: 5000,
-            timeout: 15000,
-            withCredentials: true,
-            autoConnect: true,
+            ...socketConfig,
           })
           setupHandlers(socketInstance)
           socketRef.current = socketInstance
@@ -428,5 +420,4 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
 
   return { state, confirmWager, setReady, adminEndMatch, reportMatchResult }
 }
-
 
