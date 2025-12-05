@@ -41,7 +41,8 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
     if (!lobbyId) return
     
     const isProd = process.env.NODE_ENV === 'production'
-    const primaryPath = process.env.NEXT_PUBLIC_SOCKET_PATH || '/socket.io'
+    // Use /api/socketio to match working Cock Combat implementation
+    const primaryPath = process.env.NEXT_PUBLIC_SOCKET_PATH || '/api/socketio'
     const fallbackPath = '/socket.io'
     const transports: ("websocket" | "polling")[] = isProd ? ['websocket', 'polling'] : ['polling', 'websocket']
 
@@ -239,7 +240,15 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
           } catch {}
           socketInstance = io(nextHost!, {
             path: fallbackPath,
-            ...socketConfig,
+            addTrailingSlash: false,
+            transports: ['polling', 'websocket'],
+            reconnection: true,
+            reconnectionAttempts: 10,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            timeout: 15000,
+            withCredentials: true,
+            autoConnect: true,
           })
           setupHandlers(socketInstance)
           socketRef.current = socketInstance

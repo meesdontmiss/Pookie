@@ -70,13 +70,13 @@ interface PlayerRuntimeState {
 const app = express()
 const server = http.createServer(app)
 
-// Use an explicit Socket.IO path so we can line it up with the frontend and
-// avoid any host-level quirks around the default "/socket.io" path.
-// On the client side we use NEXT_PUBLIC_SOCKET_PATH to match this.
-const SOCKET_IO_PATH = process.env.SOCKET_IO_PATH || '/sumo-socket'
+// Use /api/socketio path to match working Cock Combat implementation
+// This path works reliably with Render's WebSocket proxy
+const SOCKET_IO_PATH = process.env.SOCKET_IO_PATH || '/api/socketio'
 
 const io = new Server(server, {
   path: SOCKET_IO_PATH,
+  addTrailingSlash: false,
   cors: { origin: '*', methods: ['GET', 'POST'] },
 })
 
