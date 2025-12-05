@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import React, { useEffect } from 'react';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import RoyaleGameScene from '@/components/plug-penguin/minigames/pookie-sumo-royale/royale-game-scene';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useGuestIdentity } from '@/hooks/use-guest-identity';
@@ -10,6 +10,7 @@ import { useGuestIdentity } from '@/hooks/use-guest-identity';
 export default function GamePage() {
   const params = useParams();
   const searchParams = useSearchParams(); // To potentially get isPractice if passed in query
+  const router = useRouter();
   const { publicKey } = useWallet();
   const guestId = useGuestIdentity();
 
@@ -17,6 +18,23 @@ export default function GamePage() {
   // Attempt to get isPractice from query params, if NewLobbyRoom passes it.
   // Otherwise, RoyaleGameScene might need a way to fetch/determine this if critical.
   const isPractice = searchParams.get('practice') === 'true'; 
+
+  // If the user hard-refreshes the live arena, send them back to the lobby browser.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const navEntries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
+      const navType = navEntries[0]?.type || (performance as any).navigation?.type;
+      const isReload =
+        navType === 'reload' ||
+        navType === 1; // legacy PerformanceNavigation.TYPE_RELOAD
+      if (isReload) {
+        router.replace('/pookiesumoroyale/lobby-browser');
+      }
+    } catch {
+      // Best-effort; ignore if PerformanceNavigationTiming unsupported.
+    }
+  }, [router]);
 
   if (!gameId) {
     return (
