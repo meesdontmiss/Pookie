@@ -1342,23 +1342,34 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
     // Example: if (internalGameState === 'ACTIVE') { ... }
   }, [internalGameState]); // Add internalGameState if decisions depend on it
 
+  // Keyboard control map for KeyboardControls
+  const keyboardMap = [
+    { name: Controls.forward, keys: ['KeyW', 'ArrowUp'] },
+    { name: Controls.back, keys: ['KeyS', 'ArrowDown'] },
+    { name: Controls.left, keys: ['KeyA', 'ArrowLeft'] },
+    { name: Controls.right, keys: ['KeyD', 'ArrowRight'] },
+    { name: Controls.jump, keys: ['Space'] },
+    { name: Controls.push, keys: ['KeyE'] },
+  ];
+
   // In render, ensure all R3F hook users live inside a <Canvas>,
   // with HUD / status UI overlaid via normal DOM.
   return (
     <div style={{ width: '100vw', height: '100vh', position: 'relative', background: '#020617' }}>
-      <Canvas
-        shadows
-        camera={{ position: [0, 25, 45], fov: 50 }}
-      >
-        <color attach="background" args={['#020617']} />
-        <ambientLight intensity={0.6} />
-        <directionalLight position={[10, 20, 5]} intensity={1.0} castShadow />
-        {/* HDRI environment + snowfall for atmosphere */}
-        {/* Reuse the cinematic lobby HDRI for consistency */}
-        <Environment files="/HDRI/passendorf_snow_1k.hdr" background={false} />
-        <FallingSnow count={600} radius={70} speed={0.25} />
+      <KeyboardControls map={keyboardMap}>
+        <Canvas
+          shadows
+          camera={{ position: [0, 25, 45], fov: 50 }}
+        >
+          <color attach="background" args={['#020617']} />
+          <ambientLight intensity={0.6} />
+          <directionalLight position={[10, 20, 5]} intensity={1.0} castShadow />
+          {/* HDRI environment + snowfall for atmosphere */}
+          {/* Reuse the cinematic lobby HDRI for consistency */}
+          <Environment files="/HDRI/passendorf_snow_1k.hdr" background={false} />
+          <FallingSnow count={600} radius={70} speed={0.25} />
 
-        <Physics gravity={[0, -9.81, 0]}>
+          <Physics gravity={[0, -9.81, 0]}>
           <ArenaPlatform />
           {/* Local controllable player */}
           {socket && localPlayerId && (
@@ -1402,7 +1413,8 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
             onSetSpectatedPlayerId={setSpectatedPlayerId}
           />
         )}
-      </Canvas>
+        </Canvas>
+      </KeyboardControls>
 
       <GameStatusUI
         gameState={internalGameState}
