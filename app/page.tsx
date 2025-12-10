@@ -139,13 +139,21 @@ export default function Home() {
                 {
                   key: 'pookhub',
                   title: 'PookHub',
-                  onClick: () => window.open('https://www.pornhub.com/model/pookiethepeng', '_blank'),
+                  onClick: () => {
+                    if (typeof window !== 'undefined') {
+                      window.open('https://www.pornhub.com/model/pookiethepeng', '_blank')
+                    }
+                  },
                   imageSrc: '/images/pookie-smashin.gif',
                 },
                 {
                   key: 'dexscreener',
                   title: 'Dexscreener',
-                  onClick: () => window.open('https://dexscreener.com', '_blank'),
+                  onClick: () => {
+                    if (typeof window !== 'undefined') {
+                      window.open('https://dexscreener.com', '_blank')
+                    }
+                  },
                   imageSrc: '/images/POOKIE DOLLAR.jpg',
                 },
               ]}
