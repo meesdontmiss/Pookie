@@ -414,8 +414,13 @@
   .dock {
     position: relative;
     bottom: auto;
+    left: 0;
+    transform: none;
     margin-top: 40px;
     margin-bottom: 50px;
+    display: flex;
+    justify-content: center;
+    width: 100%;
   }
   .dockInner {
     gap: 16px;
@@ -425,6 +430,7 @@
     width: auto;
     flex-wrap: nowrap;
     justify-content: center;
+    margin: 0 auto;
   }
   .dockItem {
     width: 58px;
@@ -452,6 +458,9 @@
   .dock {
     margin-top: 30px;
     margin-bottom: 40px;
+    display: flex;
+    justify-content: center;
+    width: 100%;
   }
   .dockInner {
     gap: 12px;
@@ -459,6 +468,8 @@
     border-radius: 14px;
     max-width: 95vw;
     flex-wrap: wrap;
+    margin: 0 auto;
+    justify-content: center;
   }
   .dockItem {
     width: 52px;
