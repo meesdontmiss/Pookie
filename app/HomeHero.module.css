@@ -189,15 +189,15 @@
     margin-bottom: -10px;
   }
   .flame {
-    height: 90px;
-    transform: translateY(-25px);
+    height: 110px;
+    transform: translateY(-28px);
   }
   .flameLeft {
-    margin-right: -10px;
+    margin-right: -12px;
   }
   .flameRight {
-    margin-left: -10px;
-    transform: scaleX(-1) translateY(-25px);
+    margin-left: -12px;
+    transform: scaleX(-1) translateY(-28px);
   }
   .heroCenter {
     margin: 0;
@@ -230,15 +230,15 @@
     gap: 8px;
   }
   .flame {
-    height: 75px;
-    transform: translateY(-20px);
+    height: 95px;
+    transform: translateY(-24px);
   }
   .flameLeft {
-    margin-right: -8px;
+    margin-right: -10px;
   }
   .flameRight {
-    margin-left: -8px;
-    transform: scaleX(-1) translateY(-20px);
+    margin-left: -10px;
+    transform: scaleX(-1) translateY(-24px);
   }
   .titleImage {
     width: 230px;
