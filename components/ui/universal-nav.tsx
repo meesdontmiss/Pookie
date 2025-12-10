@@ -29,9 +29,9 @@ export default function UniversalNav() {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-900/50 backdrop-blur-md text-white px-3 py-0 shadow-lg h-14 sm:h-16 flex items-center">
-      <div className="container mx-auto flex items-center justify-between h-full">
+      <div className="w-full mx-auto flex items-center justify-between h-full">
         {/* Left Section: Home + Contract */}
-        <div className="flex items-center justify-start w-[80px] sm:w-[200px] space-x-2 sm:space-x-3 flex-shrink-0">
+        <div className="flex items-center justify-start w-[50px] sm:w-[200px] space-x-2 sm:space-x-3 flex-shrink-0">
           <Link href="/?force-landing=true" legacyBehavior>
             <a aria-label="Home" className="inline-flex items-center justify-center text-white hover:text-cyan-300 transition-colors duration-200">
               <Home size={20} strokeWidth={2.25} />
@@ -41,7 +41,7 @@ export default function UniversalNav() {
             onClick={handleCopyContract}
             disabled={contractAddress === "COMING SOON"}
             className={`
-              flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold
+              hidden sm:flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold
               transition-all duration-200
               ${contractAddress === "COMING SOON" 
                 ? 'bg-white/5 text-white/40 cursor-not-allowed border border-white/10' 
@@ -66,8 +66,8 @@ export default function UniversalNav() {
           </button>
         </div>
 
-        {/* Center Section: Title GIF */}
-        <div className="flex-1 text-center h-full flex items-center justify-center">
+        {/* Center Section: Title GIF - Hidden on mobile */}
+        <div className="hidden sm:flex flex-1 text-center h-full items-center justify-center">
           <Link href="/?force-landing=true" legacyBehavior>
             <a className="inline-block hover:opacity-90 transition-opacity duration-300 h-full" aria-label="Go to home">
               <img
@@ -81,7 +81,7 @@ export default function UniversalNav() {
         </div>
 
         {/* Right Section: Wallet + Twitter */}
-        <div className="flex items-center justify-end w-[160px] sm:w-[220px] space-x-2 sm:space-x-3 flex-shrink-0">
+        <div className="flex items-center justify-end w-[50px] sm:w-[220px] space-x-2 sm:space-x-3 flex-shrink-0 ml-auto sm:ml-0">
           {hasMounted ? (
             <div className="relative wallet-multi-wrapper">
               <WalletMultiButton className="wallet-button-reset" />
