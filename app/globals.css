@@ -19,6 +19,23 @@ body {
   height: 100%;
 }
 
+/* Allow scrolling on mobile for landing page */
+@media (max-width: 768px) {
+  html, body {
+    overflow-x: hidden;
+    overflow-y: auto;
+    position: relative;
+    height: auto;
+    min-height: 100vh;
+  }
+  
+  body {
+    position: relative;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;

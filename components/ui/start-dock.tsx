@@ -18,6 +18,17 @@ export default function StartDock({ items }: { items: DockItem[] }) {
   const [mouseX, setMouseX] = useState<number | null>(null)
   const [scales, setScales] = useState<number[]>(() => items.map(() => 1))
   const activeIdxRef = useRef<number | null>(null)
+  const [isMobile, setIsMobile] = useState(false)
+
+  // Detect mobile on mount
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768)
+    }
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
   const playSound = (type: 'hover' | 'down' | 'up') => {
     try {
@@ -77,10 +88,12 @@ export default function StartDock({ items }: { items: DockItem[] }) {
   }
 
   const handleMove = (e: React.MouseEvent) => {
+    if (isMobile) return // Disable magnification on mobile
     setMouseX(e.clientX)
     updateScales(e.clientX)
   }
   const handleLeave = () => {
+    if (isMobile) return // Disable magnification on mobile
     setMouseX(null)
     updateScales(null)
   }
@@ -105,10 +118,13 @@ export default function StartDock({ items }: { items: DockItem[] }) {
               onClick={item.onClick}
               onMouseDown={() => playSound('down')}
               onMouseUp={() => playSound('up')}
+              onTouchStart={() => playSound('down')}
+              onTouchEnd={() => playSound('up')}
               ref={(el) => (itemRefs.current[idx] = el)}
               style={{
                 transform: `translateY(${-lift}px) scale(${scale})`,
                 filter: `drop-shadow(0 10px 22px rgba(0,0,0,${shadowStrength}))`,
+                WebkitTapHighlightColor: 'transparent',
               }}
             >
               {item.render ? (

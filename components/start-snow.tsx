@@ -2,11 +2,23 @@
 
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Stars } from '@react-three/drei'
-import React, { useMemo, useRef } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 
 function Snow() {
-  const snowCount = 250
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768)
+    }
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  // Reduce particle count on mobile for better performance
+  const snowCount = isMobile ? 100 : 250
 
   const { positions, sizes } = useMemo(() => {
     const pos = new Float32Array(snowCount * 3)
@@ -75,17 +87,32 @@ function Snow() {
 }
 
 export default function StartSnow() {
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768)
+    }
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  // Reduce stars and quality on mobile
+  const starCount = isMobile ? 2000 : 5000
+  const dpr = isMobile ? Math.min(window.devicePixelRatio, 1.5) : window.devicePixelRatio
+
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
       <Canvas
         style={{ width: '100%', height: '100%' }}
-        dpr={typeof window !== 'undefined' ? window.devicePixelRatio : 1}
-        gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
+        dpr={typeof window !== 'undefined' ? dpr : 1}
+        gl={{ antialias: !isMobile, alpha: true, powerPreference: 'high-performance' }}
         camera={{ position: [0, 0, 5], fov: 40 }}
       >
         <ambientLight intensity={0.6} />
         <directionalLight position={[5, 5, 5]} intensity={0.8} />
-        <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} />
+        <Stars radius={100} depth={50} count={starCount} factor={4} saturation={0} />
         <Snow />
       </Canvas>
     </div>

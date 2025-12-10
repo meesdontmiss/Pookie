@@ -34,6 +34,12 @@ const inter = Inter({ subsets: ['latin'] })
 export const metadata: Metadata = {
   title: 'Pookie The Peng',
   description: 'Pookie Sumo Royale and Social Hub',
+  viewport: {
+    width: 'device-width',
+    initialScale: 1,
+    maximumScale: 5,
+    userScalable: true,
+  },
   icons: {
     icon: '/images/POOKIE BLANK WADDLE gif.gif',
     shortcut: '/images/POOKIE BLANK WADDLE gif.gif',

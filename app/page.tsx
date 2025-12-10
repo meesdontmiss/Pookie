@@ -38,12 +38,8 @@ export default function Home() {
       setIsMobile(mobile)
       
       if (mobile) {
-        // Mobile: scale to fit viewport
-        const rawScale = Math.min(
-          window.innerWidth / STAGE_WIDTH,
-          window.innerHeight / STAGE_HEIGHT
-        )
-        setStageScale(rawScale)
+        // Mobile: no scaling, use native responsive layout
+        setStageScale(1)
       } else {
         // Desktop: lock to 1920x1080, scale down only if needed
         const rawScale = Math.min(
@@ -85,23 +81,27 @@ export default function Home() {
                 src="/images/8bitlazersword.gif"
                 alt="Left flamethrower"
                 className={`${styles.flame} ${styles.flameLeft}`}
+                loading="eager"
               />
               <div className={styles.heroCenter}>
                 <img
                   src="/images/TITLE-TEXT.gif"
                   alt="Plug Penguin Title"
                   className={styles.titleImage}
+                  loading="eager"
                 />
                 <img
                   src="/images/the-plastic-penguin-text-gif.gif"
                   alt="The Plastic Penguin Tagline"
                   className={styles.taglineImage}
+                  loading="eager"
                 />
               </div>
               <img
                 src="/images/8bitlazersword.gif"
                 alt="Right flamethrower"
                 className={`${styles.flame} ${styles.flameRight}`}
+                loading="eager"
               />
             </div>
 
@@ -110,6 +110,7 @@ export default function Home() {
               src="/images/POOKIE BLANK WADDLE gif.gif"
               alt="Pookie Waddle"
               className={styles.waddleGif}
+              loading="eager"
             />
           </div>
           
