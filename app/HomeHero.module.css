@@ -33,11 +33,12 @@
   position: fixed;
   inset: 0;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   background: linear-gradient(to bottom, #1e3a8a 0%, #020617 100%);
   overflow-x: hidden;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .mobileWrapper {
@@ -45,6 +46,10 @@
   width: 100vw;
   min-height: 100vh;
   transform-origin: top center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 .mobileContent {
@@ -54,14 +59,14 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  padding: 20px 16px 40px;
+  justify-content: center;
+  padding: 20px 0;
   z-index: 10; /* Ensure mobile content sits above global star/snow background */
 }
 
 @media (max-width: 480px) {
   .mobileContent {
-    padding: 15px 12px 30px;
+    padding: 15px 0;
   }
 }
 
@@ -172,72 +177,81 @@
   .heroOverlay {
     position: relative;
     inset: auto;
-    padding-top: 10px;
+    padding-top: 30px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
   }
   .heroRow {
-    gap: 8px;
-    padding: 0 12px;
+    gap: 10px;
+    padding: 0;
+    margin-bottom: -10px;
   }
   .flame {
-    height: 70px;
-    transform: translateY(-15px);
+    height: 90px;
+    transform: translateY(-25px);
   }
   .flameLeft {
-    margin-right: -6px;
+    margin-right: -10px;
   }
   .flameRight {
-    margin-left: -6px;
-    transform: scaleX(-1) translateY(-15px);
+    margin-left: -10px;
+    transform: scaleX(-1) translateY(-25px);
+  }
+  .heroCenter {
+    margin: 0;
   }
   .titleImage {
-    width: 240px;
-    transform: translateY(2px);
+    width: 280px;
+    transform: translateY(4px);
   }
   .taglineImage {
-    width: 280px;
-    transform: translateY(-190px);
+    width: 320px;
+    transform: translateY(-220px);
+    margin-bottom: -200px;
   }
   .waddleGif {
-    width: 200px;
+    width: 240px;
     position: relative;
     top: auto;
     left: auto;
     transform: none;
-    margin: 30px auto 20px;
+    margin: 20px auto 0;
   }
 }
 
 /* Extra small mobile (phones in portrait) */
 @media (max-width: 480px) {
   .heroOverlay {
-    padding-top: 5px;
+    padding-top: 20px;
   }
   .heroRow {
-    gap: 6px;
-    padding: 0 8px;
+    gap: 8px;
   }
   .flame {
-    height: 60px;
-    transform: translateY(-12px);
+    height: 75px;
+    transform: translateY(-20px);
   }
   .flameLeft {
-    margin-right: -4px;
+    margin-right: -8px;
   }
   .flameRight {
-    margin-left: -4px;
-    transform: scaleX(-1) translateY(-12px);
+    margin-left: -8px;
+    transform: scaleX(-1) translateY(-20px);
   }
   .titleImage {
-    width: 200px;
-    transform: translateY(2px);
+    width: 230px;
+    transform: translateY(3px);
   }
   .taglineImage {
-    width: 240px;
-    transform: translateY(-160px);
+    width: 270px;
+    transform: translateY(-180px);
+    margin-bottom: -165px;
   }
   .waddleGif {
-    width: 170px;
-    margin: 20px auto 15px;
+    width: 200px;
+    margin: 15px auto 0;
   }
 }
 
@@ -400,21 +414,21 @@
   .dock {
     position: relative;
     bottom: auto;
-    margin-top: 30px;
-    margin-bottom: 30px;
+    margin-top: 40px;
+    margin-bottom: 50px;
   }
   .dockInner {
-    gap: 14px;
-    padding: 10px 14px;
-    border-radius: 14px;
+    gap: 16px;
+    padding: 12px 16px;
+    border-radius: 16px;
     max-width: none;
     width: auto;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     justify-content: center;
   }
   .dockItem {
-    width: 54px;
-    height: 54px;
+    width: 58px;
+    height: 58px;
   }
   .dockItem:hover {
     transform: translateY(-4px) scale(1.08);
@@ -436,18 +450,19 @@
 /* Extra small mobile dock adjustments */
 @media (max-width: 480px) {
   .dock {
-    margin-top: 20px;
-    margin-bottom: 20px;
+    margin-top: 30px;
+    margin-bottom: 40px;
   }
   .dockInner {
     gap: 12px;
-    padding: 8px 12px;
-    border-radius: 12px;
+    padding: 10px 14px;
+    border-radius: 14px;
     max-width: 95vw;
+    flex-wrap: wrap;
   }
   .dockItem {
-    width: 48px;
-    height: 48px;
+    width: 52px;
+    height: 52px;
   }
   .warning {
     font-size: 11px;
