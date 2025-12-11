@@ -9,6 +9,7 @@ function Snow() {
   const [isMobile, setIsMobile] = useState(false)
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
     const checkMobile = () => {
       setIsMobile(window.innerWidth <= 768)
     }
@@ -90,6 +91,7 @@ export default function StartSnow() {
   const [isMobile, setIsMobile] = useState(false)
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
     const checkMobile = () => {
       setIsMobile(window.innerWidth <= 768)
     }
@@ -100,7 +102,7 @@ export default function StartSnow() {
 
   // Reduce stars and quality on mobile
   const starCount = isMobile ? 2000 : 5000
-  const dpr = isMobile ? Math.min(window.devicePixelRatio, 1.5) : window.devicePixelRatio
+  const dpr = (typeof window !== 'undefined') ? (isMobile ? Math.min(window.devicePixelRatio, 1.5) : window.devicePixelRatio) : 1
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }}>

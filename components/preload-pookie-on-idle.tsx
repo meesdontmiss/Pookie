@@ -10,11 +10,12 @@ export default function PreloadPookieOnIdle() {
         mod.useGLTF.preload('/models/POOKIE.glb')
       } catch {}
     }
-    // Prefer idle; fallback to small timeout
-    if (typeof (window as any).requestIdleCallback === 'function') {
-      ;(window as any).requestIdleCallback(preload)
-    } else {
-      setTimeout(preload, 300)
+    if (typeof window !== 'undefined') {
+      if (typeof (window as any).requestIdleCallback === 'function') {
+        ;(window as any).requestIdleCallback(preload)
+      } else {
+        setTimeout(preload, 300)
+      }
     }
   }, [])
   return null
