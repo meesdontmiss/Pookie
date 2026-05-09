@@ -11,6 +11,8 @@ import LobbyPanel from '@/components/lobby/lobby-panel'
 import styles from './lobby.module.css'
 import { useLobbyCounts } from '@/hooks/use-lobby-counts'
 import { useGuestIdentity } from '@/hooks/use-guest-identity'
+import SkinPicker from '@/components/plug-penguin/minigames/pookie-sumo-royale/SkinPicker'
+import { History, Palette } from 'lucide-react'
 
 export default function LobbyBrowserPage() {
   const router = useRouter();
@@ -22,6 +24,7 @@ export default function LobbyBrowserPage() {
   const [panelOpen, setPanelOpen] = useState(false)
   const [activeLobby, setActiveLobby] = useState<HardLobby | null>(null)
   const [isJoining, setIsJoining] = useState<string | null>(null);
+  const [skinPickerOpen, setSkinPickerOpen] = useState(false);
   
   // Subscribe to live lobby counts
   const lobbyCounts = useLobbyCounts()
@@ -91,11 +94,18 @@ export default function LobbyBrowserPage() {
                   </div>
                   <div className="flex items-center gap-2">
             <button
-                      disabled
-                      className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-cyan-600/30 text-cyan-400 bg-black/60 opacity-60 cursor-not-allowed flex items-center gap-1"
+                      onClick={() => setSkinPickerOpen(true)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-purple-500/40 text-purple-300 bg-purple-900/30 hover:bg-purple-800/40 cursor-pointer flex items-center gap-1 transition-all"
                     >
-                      <Eye className="h-3.5 w-3.5" />
-                      Spectate (Coming Soon)
+                      <Palette className="h-3.5 w-3.5" />
+                      Skins
+            </button>
+            <button
+                      onClick={() => router.push('/pookiesumoroyale/match-history')}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-cyan-600/30 text-cyan-400 bg-black/60 hover:bg-cyan-900/30 cursor-pointer flex items-center gap-1 transition-all"
+                    >
+                      <History className="h-3.5 w-3.5" />
+                      Match History
             </button>
           </div>
                 </div>
@@ -244,6 +254,7 @@ export default function LobbyBrowserPage() {
         </div>
       </main>
 
+      <SkinPicker open={skinPickerOpen} onClose={() => setSkinPickerOpen(false)} />
     </div>
   );
 }

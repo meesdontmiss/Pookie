@@ -86,12 +86,14 @@ const RoyaleGameScene: React.FC<RoyaleGameSceneProps> = ({ lobbyId, isPractice }
     });
 
     // Connect a lightweight game socket for the active match room
+    let socketInstance: ReturnType<typeof io> | null = null;
     try {
       const isProd = process.env.NODE_ENV === 'production';
       const url = process.env.NEXT_PUBLIC_SOCKET_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:4001');
-      const path = process.env.NEXT_PUBLIC_SOCKET_PATH || '/api/socketio'; // Match Cock Combat path
+      const path = process.env.NEXT_PUBLIC_SOCKET_PATH || '/api/socketio';
       const transports = isProd ? ['websocket'] : ['polling','websocket'];
       const s = io(url, { path, transports, addTrailingSlash: false, withCredentials: true, autoConnect: true });
+      socketInstance = s;
       const id = publicKey?.toBase58?.() || '';
       const guest = (typeof window !== 'undefined') ? (localStorage.getItem('guest_id') || (window as any).__guestId) : null;
       const identity = (id || guest || '').toString();
@@ -101,18 +103,17 @@ const RoyaleGameScene: React.FC<RoyaleGameSceneProps> = ({ lobbyId, isPractice }
         try { s.emit('join_match_room', { matchSessionId: lobbyId }) } catch {}
       });
       setSocket(s);
-      return () => {
-        try { s.off() } catch {}
-        try { s.disconnect() } catch {}
-        setSocket(null);
-      };
     } catch (e) {
       console.warn('Failed to init game socket', e);
     }
 
     return () => {
       console.log('[RoyaleGameScene] Unmounting game scene for lobbyId:', lobbyId);
-      // Cleanup game-specific socket connections if any were made here
+      if (socketInstance) {
+        try { socketInstance.off() } catch {}
+        try { socketInstance.disconnect() } catch {}
+      }
+      setSocket(null);
     };
   }, [lobbyId, isPractice, walletConnected, publicKey]);
 

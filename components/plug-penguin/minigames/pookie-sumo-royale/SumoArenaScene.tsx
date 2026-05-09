@@ -10,6 +10,8 @@ import { Physics, RigidBody, BallCollider, CylinderCollider, TrimeshCollider, Cu
 import { useKeyboardControls } from '@react-three/drei'; // For keyboard controls
 import io, { Socket } from 'socket.io-client'; // Added socket.io-client
 import PushEffect from '../../effects/PushEffect'; // Import the new effect
+import MobileControls from './MobileControls';
+import { getSelectedSkinId, getSkinById, DEFAULT_SKIN } from '@/shared/skins';
 
 // Preload the Pookie model
 useGLTF.preload('/models/POOKIE.glb');
@@ -56,6 +58,10 @@ interface PlayerProps {
   initialYawAngle?: number; // New: For initial Y-axis rotation (facing direction)
   onPushAction?: (pusherPosition: THREE.Vector3, pusherRef: React.RefObject<any>) => void; // New callback
   platformHeightActual: number; // New: Pass platformHeight for accurate calculations
+  mobileInputRef?: React.RefObject<{ x: number; y: number; jump: boolean; push: boolean }>; // Mobile touch input
+  skinModelPath?: string;
+  skinScale?: number;
+  skinOffsetY?: number;
 }
 
 // Define LivePlayer interface for HUD
@@ -112,10 +118,11 @@ interface AIPlayerState {
 
 // Player Component - Now uses React.forwardRef and React.memo
 const Player = React.memo(React.forwardRef<any, PlayerProps>((
-  { ballColor, socket, isSpectatingOrEliminated, onFallenOff, username, initialPosition, initialYawAngle, onPushAction, platformHeightActual }, 
+  { ballColor, socket, isSpectatingOrEliminated, onFallenOff, username, initialPosition, initialYawAngle, onPushAction, platformHeightActual, mobileInputRef, skinModelPath, skinScale, skinOffsetY }, 
   ref // This ref will be attached to the RigidBody
 ) => {
-  const { scene: pookieScene } = useGLTF('/models/POOKIE.glb');
+  const modelPath = skinModelPath || '/models/POOKIE.glb';
+  const { scene: pookieScene } = useGLTF(modelPath);
   const { camera } = useThree(); // Get camera for initial setup
   const initialCameraSetupDone = useRef(false); // Ensure one-time setup
   // Reverted to original simpler useState initialization
@@ -136,8 +143,8 @@ const Player = React.memo(React.forwardRef<any, PlayerProps>((
 
   const playerRadius = 0.7;
   const MAX_LINEAR_VELOCITY = 10;
-  const pookieModelScale = 0.25;
-  const pookieModelPositionOffset = new THREE.Vector3(0, -playerRadius * 0.65, 0);
+  const pookieModelScale = skinScale ?? 0.25;
+  const pookieModelPositionOffset = new THREE.Vector3(0, skinOffsetY ?? (-playerRadius * 0.65), 0);
   const hasFallenOff = useRef(false);
   const isLocalPlayerInstance = !!onPushAction; // Determine if this is the local player
 
@@ -238,7 +245,15 @@ const Player = React.memo(React.forwardRef<any, PlayerProps>((
 
     // Player controls/movement and state updates
     if (socket && !isSpectatingOrEliminated && !hasFallenOff.current) {
-        const { forward, back, left, right, jump, push } = getKeys();
+        const kbKeys = getKeys();
+        // Merge mobile inputs with keyboard inputs
+        const mobile = mobileInputRef?.current;
+        const forward = kbKeys.forward || (mobile && mobile.y > 0.2);
+        const back = kbKeys.back || (mobile && mobile.y < -0.2);
+        const left = kbKeys.left || (mobile && mobile.x < -0.2);
+        const right = kbKeys.right || (mobile && mobile.x > 0.2);
+        const jump = kbKeys.jump || (mobile && mobile.jump);
+        const push = kbKeys.push || (mobile && mobile.push);
     const impulse = { x: 0, y: 0, z: 0 };
     const torque = { x: 0, y: 0, z: 0 };
         const currentVel = rigidBody.linvel();
@@ -423,32 +438,25 @@ const Player = React.memo(React.forwardRef<any, PlayerProps>((
       <BallCollider args={[playerRadius]} />
       
       <mesh castShadow receiveShadow rotation={[0, 0, Math.PI / 2]}> 
-        <sphereGeometry args={[playerRadius, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2]} />
-        <meshPhysicalMaterial
+        <sphereGeometry args={[playerRadius, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshStandardMaterial
             color="#e0f0ff" 
-            roughness={0.1}
+            roughness={0.15}
             metalness={0.05}
             transparent={true}
             opacity={0.25} 
-            clearcoat={0.95}
-            clearcoatRoughness={0.05}
-            transmission={0.95} 
-            thickness={0.1}
-            ior={1.5}
             envMapIntensity={0.7}
             side={THREE.DoubleSide}
         />
       </mesh>
       <mesh castShadow receiveShadow rotation={[0, 0, -Math.PI / 2]}> 
-        <sphereGeometry args={[playerRadius, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2]} />
-        <meshPhysicalMaterial
+        <sphereGeometry args={[playerRadius, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshStandardMaterial
             color={ballColor} 
             roughness={0.2}
             metalness={0.3}
             transparent={true}
             opacity={0.75} 
-            clearcoat={0.8}
-            clearcoatRoughness={0.1}
             emissive={emissiveColor} 
             emissiveIntensity={0.4} 
             side={THREE.DoubleSide}
@@ -555,34 +563,27 @@ const OtherPlayer: React.FC<OtherPlayerProps> = React.memo(({
       type="kinematicPosition" // Key for server-driven movement
     >
       <BallCollider args={[playerRadius]} />
-      {/* Visual Ball Shell (same as local Player) */}
-      <mesh castShadow receiveShadow rotation={[0, 0, Math.PI / 2]}>
-        <sphereGeometry args={[playerRadius, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2]} />
-        <meshPhysicalMaterial
+      {/* Visual Ball Shell — optimized: meshStandard instead of meshPhysical */}
+      <mesh castShadow={false} receiveShadow={false} rotation={[0, 0, Math.PI / 2]}>
+        <sphereGeometry args={[playerRadius, 12, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshStandardMaterial
             color="#e0f0ff"
-            roughness={0.1}
+            roughness={0.15}
             metalness={0.05}
             transparent={true}
             opacity={0.25}
-            clearcoat={0.95}
-            clearcoatRoughness={0.05}
-            transmission={0.95}
-            thickness={0.1}
-            ior={1.5}
             envMapIntensity={0.7}
             side={THREE.DoubleSide}
         />
       </mesh>
-      <mesh castShadow receiveShadow rotation={[0, 0, -Math.PI / 2]}>
-        <sphereGeometry args={[playerRadius, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2]} />
-        <meshPhysicalMaterial
+      <mesh castShadow={false} receiveShadow={false} rotation={[0, 0, -Math.PI / 2]}>
+        <sphereGeometry args={[playerRadius, 12, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshStandardMaterial
             color={ballColor}
             roughness={0.2}
             metalness={0.3}
             transparent={true}
             opacity={0.75}
-            clearcoat={0.8}
-            clearcoatRoughness={0.1}
             emissive={emissiveColor}
             emissiveIntensity={0.4}
             side={THREE.DoubleSide}
@@ -797,7 +798,7 @@ const Blimp: React.FC = () => {
       blimpRef.current.position.y = blimpAltitude;
       blimpRef.current.rotation.y = -angle + Math.PI / 2; 
 
-      if (clock.elapsedTime - lastFireworkTime.current > 30) { 
+      if (clock.elapsedTime - lastFireworkTime.current > 60) { 
         lastFireworkTime.current = clock.elapsedTime;
         const fireworkId = `fw-${performance.now()}`;
         const colors = [new THREE.Color('gold'), new THREE.Color('red'), new THREE.Color('cyan'), new THREE.Color('lime'), new THREE.Color('magenta'), new THREE.Color('orange')];
@@ -905,19 +906,18 @@ const Cloud: React.FC<CloudProps> = ({ initialPosition, scale = 1 }) => {
 
   return (
     <group ref={groupRef} position={initialPosition} scale={scale}>
-      <Sphere args={[1.5, 12, 8]} position={[0, 0, 0]}>{puffMaterial}</Sphere>
-      <Sphere args={[1, 12, 8]} position={[1, -0.2, 0.5]}>{puffMaterial}</Sphere>
-      <Sphere args={[0.8, 12, 8]} position={[-1, 0.1, -0.3]}>{puffMaterial}</Sphere>
-      <Sphere args={[1.2, 12, 8]} position={[0.5, 0.3, -0.8]}>{puffMaterial}</Sphere>
-      <Sphere args={[0.9, 12, 8]} position={[-0.5, -0.3, 0.7]}>{puffMaterial}</Sphere> {/* Added one more puff */}
+      <Sphere args={[1.5, 6, 5]} position={[0, 0, 0]}>{puffMaterial}</Sphere>
+      <Sphere args={[1, 6, 5]} position={[1, -0.2, 0.5]}>{puffMaterial}</Sphere>
+      <Sphere args={[0.8, 6, 5]} position={[-1, 0.1, -0.3]}>{puffMaterial}</Sphere>
+      <Sphere args={[1.2, 6, 5]} position={[0.5, 0.3, -0.8]}>{puffMaterial}</Sphere>
     </group>
   );
 };
 
 const PaddedEdges: React.FC = () => {
   const tubeRadius = 0.75; // How thick the padding is
-  const radialSegments = 16;
-  const tubularSegments = 48;
+  const radialSegments = 8;
+  const tubularSegments = 32;
 
   // For TrimeshCollider, we need vertices and indices
   const geometry = useMemo(() => {
@@ -951,8 +951,8 @@ const PaddedEdges: React.FC = () => {
 
 const GlowingTrim: React.FC = () => {
   const trimTubeRadius = 0.15; // Thinner tube for the trim
-  const radialSegments = 16;
-  const tubularSegments = 48;
+  const radialSegments = 6;
+  const tubularSegments = 32;
   const pastelLavender = new THREE.Color('#E6E6FA');
 
   return (
@@ -991,7 +991,7 @@ const ArenaPlatform: React.FC = () => {
       <RigidBody type="fixed" colliders={false} position={[0,0,0]} name="arena-platform-main">
         <CylinderCollider args={[platformHeight / 2, platformRadius]} /> {/* args: [height/2, radius] */}
         <mesh receiveShadow castShadow>
-          <cylinderGeometry args={[platformRadius, platformRadius, platformHeight, 64]} /> {/* Use platformHeight */}
+          <cylinderGeometry args={[platformRadius, platformRadius, platformHeight, 32]} /> {/* Use platformHeight */}
           <meshStandardMaterial 
             map={diffuseMap} 
             aoMap={aoMap}
@@ -1011,40 +1011,43 @@ const ArenaPlatform: React.FC = () => {
 // Updated GameState type to include 'STARTING_COUNTDOWN'
 interface GameStatusUIProps {
   gameState: GameState;
-  winnerInfo: { username: string; score: number } | null;
+  winnerInfo: { username: string; score?: number } | null;
   countdown: number | null;
   isSpectating?: boolean;
-  localPlayerGameStatus?: 'InGame' | 'Eliminated' | 'Spectating'; // Add prop
-  onMatchComplete: () => void; // Add this prop
+  localPlayerGameStatus?: 'InGame' | 'Eliminated' | 'Spectating';
+  onMatchComplete: () => void;
 }
 
 const GameStatusUI: React.FC<GameStatusUIProps> = ({ gameState, winnerInfo, countdown, isSpectating, localPlayerGameStatus, onMatchComplete }) => {
-  if (process.env.NODE_ENV === 'development') {
-    console.log(`[GameStatusUI] PROPS RECEIVED: gameState=${gameState}, countdown=${countdown}, isSpectating=${isSpectating}, winnerInfo=${JSON.stringify(winnerInfo)}`);
-  }
-
   let message = '';
   let showButton = false;
+  let shouldRender = true;
 
   if (winnerInfo && winnerInfo.username) {
-    message = `Winner: ${winnerInfo.username}! Score: ${winnerInfo.score}`; // Display score
+    message = winnerInfo.score != null ? `Winner: ${winnerInfo.username}! Score: ${winnerInfo.score}` : `Winner: ${winnerInfo.username}!`;
     showButton = true;
   } else if (gameState === 'WAITING') {
     message = 'Waiting for players...';
   } else if (gameState === 'STARTING_COUNTDOWN') {
-    message = countdown !== null ? `Starting in ${countdown}s...` : 'Starting...';
+    message = countdown !== null ? `Game starts in ${countdown}...` : 'Get ready...';
   } else if (gameState === 'ACTIVE') {
-    message = isSpectating ? 'Spectating' : 'Game is active!';
-    if (isSpectating === undefined && localPlayerGameStatus === 'Eliminated') { // Assuming localPlayerGameStatus is available in this scope
-      message = 'YOU ARE OUT!';
+    if (localPlayerGameStatus === 'Eliminated') {
+      message = 'YOU WERE ELIMINATED!';
+    } else if (isSpectating) {
+      message = 'Spectating';
+    } else {
+      // Don't show any overlay during active gameplay
+      shouldRender = false;
     }
   } else if (gameState === 'ROUND_OVER') {
     message = 'Round Over!';
-    showButton = true; // Or based on game logic
+    showButton = true;
   } else if (gameState === 'GAME_OVER') {
-      message = 'Game Over!';
+    message = winnerInfo ? message : 'Game Over!';
     showButton = true;
   }
+
+  if (!shouldRender) return null;
 
   return (
     <div style={{
@@ -1052,30 +1055,32 @@ const GameStatusUI: React.FC<GameStatusUIProps> = ({ gameState, winnerInfo, coun
       top: '20%',
       left: '50%',
       transform: 'translate(-50%, -50%)',
-      backgroundColor: 'rgba(0,0,0,0.7)',
+      backgroundColor: 'rgba(0,0,0,0.75)',
       color: 'white',
-      padding: '20px 40px',
-      borderRadius: '10px',
+      padding: '24px 48px',
+      borderRadius: '16px',
       fontSize: '2em',
       textAlign: 'center',
       zIndex: 1000,
+      backdropFilter: 'blur(8px)',
+      border: '1px solid rgba(255,255,255,0.15)',
+      pointerEvents: showButton ? 'auto' : 'none',
     }}>
-      <div>{message}</div>
+      <div style={{ textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{message}</div>
       {showButton && (
         <button 
-          onClick={() => {
-            console.log('Return to lobbies button clicked - implement or pass onMatchComplete');
-            onMatchComplete(); // Call the passed function
-          }}
+          onClick={onMatchComplete}
           style={{
-            padding: '12px 25px',
-            fontSize: '0.8em',
-            marginTop: '20px',
-            backgroundColor: '#007bff',
-            color: 'white',
+            padding: '14px 30px',
+            fontSize: '0.7em',
+            marginTop: '24px',
+            background: 'linear-gradient(135deg, #00ff88, #0ff0b7)',
+            color: '#0b1724',
             border: 'none',
-            borderRadius: '5px',
+            borderRadius: '12px',
             cursor: 'pointer',
+            fontWeight: 800,
+            boxShadow: '0 4px 20px rgba(0,255,136,0.4)',
           }}
         >
           Back to Lobbies
@@ -1147,7 +1152,9 @@ const SpectatorCameraHandler: React.FC<{
 
 const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete, socket, localUsername, lobbyId, isPractice, playerWalletAddress }: SumoArenaSceneProps) => {
   // Use initialGameStateFromParent as the initial state, internalGameState for mutable state
-  console.log(`!!!!!! [SumoArenaScene] TOP OF COMPONENT. Props -- localUsername: ${localUsername}, socket exists: ${!!socket}, initialGameStateFromParent: ${initialGameStateFromParent}, lobbyId: ${lobbyId}`);
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`[SumoArenaScene] Props -- localUsername: ${localUsername}, socket: ${!!socket}, gameState: ${initialGameStateFromParent}, lobbyId: ${lobbyId}`);
+  }
 
   // Start in WAITING until we receive server updates / local countdown finishes
   const [internalGameState, setInternalGameState] = useState<GameState>('WAITING');
@@ -1159,6 +1166,11 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
   const [livePlayersForHUD, setLivePlayersForHUD] = useState<LivePlayer[]>([]);
   const [spectatedPlayerId, setSpectatedPlayerId] = useState<string | null>(null);
   const [isSpectatorCamActive, setIsSpectatorCamActive] = useState(false);
+  const [localSpawnPosition, setLocalSpawnPosition] = useState<[number, number, number] | null>(null);
+  const [activePushEffects, setActivePushEffects] = useState<Array<{ id: string; position: THREE.Vector3; color: string }>>([]);
+  const mobileInputRef = useRef<{ x: number; y: number; jump: boolean; push: boolean }>({ x: 0, y: 0, jump: false, push: false });
+  const selectedSkin = useMemo(() => getSkinById(getSelectedSkinId()), []);
+  const localPlayerRef = useRef<any>(null);
   const localPlayerId = useMemo(
     () => playerWalletAddress || localUsername || '',
     [playerWalletAddress, localUsername],
@@ -1187,7 +1199,9 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
     if (!socket) return;
 
     const handleGameStatusUpdate = (payload: GameStatusUpdatePayload) => {
-      console.log('[SumoArenaScene] Received gameStatusUpdate from server:', payload);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[SumoArenaScene] gameStatusUpdate:', payload.gameState, payload.players?.length, 'players');
+      }
       if (payload.gameState) {
         setInternalGameState((prev) => {
           // Keep local countdown state until finished; afterwards trust server.
@@ -1206,6 +1220,15 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
         setCountdownUIDisplay(payload.countdown);
       }
       if (Array.isArray(payload.players) && payload.players.length > 0) {
+        // Extract local player spawn position from server data on first update
+        if (!localSpawnPosition && localPlayerId) {
+          const localEntry = payload.players.find(
+            (p) => p.id.toLowerCase() === localPlayerId.toLowerCase(),
+          );
+          if (localEntry?.position) {
+            setLocalSpawnPosition([localEntry.position.x, localEntry.position.y, localEntry.position.z]);
+          }
+        }
         const entities: Record<string, RemotePlayerStateData> = {}
         const hud: LivePlayer[] = payload.players.map((p, idx) => {
           const wallet = p.id
@@ -1256,21 +1279,50 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
       const eliminationSound = new Howl({ src: ['/sounds/knock_out_vox.mp3'], volume: 0.5 });
       eliminationSound.play();
     })
-    socket.on('match_finished', ({ winner }) => {
+    // Handle push events from other players — apply impulse to local player if in range
+    socket.on('playerPush', ({ playerId, position }: { playerId: string; position: [number, number, number] }) => {
+      // Show floor aura for the remote pusher (red/orange tint)
+      spawnPushAura(position, '#ff4466');
+
+      if (!localPlayerRef.current || localPlayerGameStatus !== 'InGame') return;
+      const localPos = localPlayerRef.current.translation();
+      const pushPos = new THREE.Vector3(position[0], position[1], position[2]);
+      const localPosVec = new THREE.Vector3(localPos.x, localPos.y, localPos.z);
+      const dist = localPosVec.distanceTo(pushPos);
+      const PUSH_RADIUS = 4.0;
+      const PUSH_FORCE = 18;
+      if (dist < PUSH_RADIUS && dist > 0.1) {
+        const direction = localPosVec.clone().sub(pushPos).normalize();
+        const force = PUSH_FORCE * (1 - dist / PUSH_RADIUS);
+        localPlayerRef.current.applyImpulse(
+          { x: direction.x * force, y: force * 0.3, z: direction.z * force },
+          true,
+        );
+        // Play hit sound when we actually get pushed
+        try { new Howl({ src: ['/sounds/ping.mp3'], volume: 0.4 }).play(); } catch {}
+      }
+    });
+
+    socket.on('match_finished', ({ matchId, winner }) => {
+      setInternalGameState('GAME_OVER');
       if (winner) {
-        setWinnerInfo({ username: winner })
+        const isLocalWinner = winner === localPlayerId;
+        setWinnerInfo({ username: isLocalWinner ? 'YOU' : winner })
         // Play victory sound
         const victorySound = new Howl({ src: ['/sounds/YOU DID IT POOKIE.mp3'], volume: 0.7 });
         victorySound.play();
+      } else {
+        setWinnerInfo({ username: 'No winner' })
       }
     })
     return () => {
       socket.off('gameStatusUpdate', handleGameStatusUpdate);
       socket.off('playerStateUpdate')
       socket.off('player_eliminated')
+      socket.off('playerPush')
       socket.off('match_finished')
     };
-  }, [socket, spectatedPlayerId]);
+  }, [socket, spectatedPlayerId, localPlayerGameStatus, spawnPushAura, localPlayerId, localSpawnPosition]);
 
   // Simple local pre-game countdown once scene mounts and socket is ready
   useEffect(() => {
@@ -1306,6 +1358,27 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
     setIsSpectatorCamActive(true);
   }, []);
 
+  const spawnPushAura = useCallback((pos: [number, number, number], color = '#00ffaa') => {
+    const id = `push-${performance.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    setActivePushEffects((prev) => [...prev, { id, position: new THREE.Vector3(pos[0], pos[1], pos[2]), color }]);
+  }, []);
+
+  const removePushEffect = useCallback((id: string) => {
+    setActivePushEffects((prev) => prev.filter((e) => e.id !== id));
+  }, []);
+
+  const handlePushAction = useCallback((position: THREE.Vector3, playerRef: React.RefObject<any>) => {
+    if (!socket || !playerRef?.current) return;
+    const pos = playerRef.current.translation();
+    // Emit push event to server for relay to other clients
+    socket.emit('playerPush', {
+      position: [pos.x, pos.y, pos.z],
+      direction: [0, 0, 0],
+    });
+    // Show local push aura on the floor (green for local player)
+    spawnPushAura([pos.x, pos.y, pos.z], '#00ff88');
+  }, [socket, spawnPushAura]);
+
   // ... (rest of the component, many parts omitted for brevity) ...
   
   // Example of correcting a comparison:
@@ -1324,6 +1397,23 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
     // Example: if (internalGameState === 'ACTIVE') { ... }
   }, [internalGameState]); // Add internalGameState if decisions depend on it
 
+  // Mobile control callbacks
+  const handleMobileMove = useCallback((x: number, y: number) => {
+    mobileInputRef.current.x = x;
+    mobileInputRef.current.y = y;
+  }, []);
+
+  const handleMobileJump = useCallback(() => {
+    mobileInputRef.current.jump = true;
+    // Auto-clear after one frame
+    setTimeout(() => { mobileInputRef.current.jump = false; }, 100);
+  }, []);
+
+  const handleMobilePush = useCallback(() => {
+    mobileInputRef.current.push = true;
+    setTimeout(() => { mobileInputRef.current.push = false; }, 100);
+  }, []);
+
   // Keyboard control map for KeyboardControls
   const keyboardMap = [
     { name: Controls.forward, keys: ['KeyW', 'ArrowUp'] },
@@ -1340,32 +1430,51 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
     <div style={{ width: '100vw', height: '100vh', position: 'relative', background: '#020617' }}>
       <KeyboardControls map={keyboardMap}>
         <Canvas
-          shadows
+          shadows={{ type: THREE.BasicShadowMap }}
           camera={{ position: [0, 25, 45], fov: 50 }}
+          dpr={[1, 1.5]}
+          performance={{ min: 0.5 }}
+          gl={{ antialias: false, powerPreference: 'high-performance' }}
         >
           <color attach="background" args={['#020617']} />
           <ambientLight intensity={0.6} />
-        <directionalLight position={[10, 20, 5]} intensity={1.0} castShadow />
+        <directionalLight
+          position={[10, 20, 5]}
+          intensity={1.0}
+          castShadow
+          shadow-mapSize-width={512}
+          shadow-mapSize-height={512}
+          shadow-camera-near={0.5}
+          shadow-camera-far={80}
+          shadow-camera-left={-30}
+          shadow-camera-right={30}
+          shadow-camera-top={30}
+          shadow-camera-bottom={-30}
+        />
         {/* HDRI environment + snowfall for atmosphere */}
         {/* Reuse the cinematic lobby HDRI for consistency */}
         <Environment files="/HDRI/passendorf_snow_1k.hdr" background />
-        <FallingSnow count={600} radius={70} speed={0.25} />
+        <FallingSnow count={200} radius={50} speed={0.25} />
 
           <Physics gravity={[0, -9.81, 0]}>
           <ArenaPlatform />
           {/* Local controllable player */}
           {socket && localPlayerId && (
             <Player
-              ref={undefined as any}
+              ref={localPlayerRef}
               ballColor="#ff66cc"
               socket={socket}
               isSpectatingOrEliminated={localPlayerGameStatus !== 'InGame'}
               onFallenOff={handleLocalFallenOff}
               username={localDisplayName}
-              initialPosition={[0, platformHeight / 2 + 1.2, platformRadius * 0.4]}
+              initialPosition={localSpawnPosition || [0, platformHeight / 2 + 1.2, platformRadius * 0.4]}
               initialYawAngle={0}
-              onPushAction={() => {}}
+              onPushAction={handlePushAction}
               platformHeightActual={platformHeight}
+              mobileInputRef={mobileInputRef}
+              skinModelPath={selectedSkin.modelPath}
+              skinScale={selectedSkin.scale}
+              skinOffsetY={selectedSkin.offsetY}
             />
           )}
 
@@ -1384,6 +1493,18 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
                 visible={p.status === 'In'}
               />
             ))}
+          {/* Push floor auras */}
+          {activePushEffects.map((effect) => (
+            <PushEffect
+              key={effect.id}
+              id={effect.id}
+              position={effect.position}
+              color={effect.color}
+              onComplete={removePushEffect}
+              maxRadius={4}
+              duration={600}
+            />
+          ))}
         </Physics>
 
         {socket && (
@@ -1397,6 +1518,13 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
         )}
         </Canvas>
       </KeyboardControls>
+
+      <MobileControls
+        onMove={handleMobileMove}
+        onJump={handleMobileJump}
+        onPush={handleMobilePush}
+        visible={internalGameState === 'ACTIVE' && localPlayerGameStatus === 'InGame'}
+      />
 
       <GameStatusUI
         gameState={internalGameState}

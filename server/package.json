@@ -1,18 +1,24 @@
 {
   "name": "pookie-game-server",
   "version": "1.0.0",
-  "description": "Game server for Pookie with WebRTC signaling and WebSocket support",
-  "main": "index.js",
+  "description": "Authoritative Sumo game server with Socket.IO, Supabase, and Solana escrow",
+  "main": "socket-server.ts",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "tsx socket-server.ts",
+    "dev": "tsx watch socket-server.ts"
   },
   "dependencies": {
+    "@solana/web3.js": "^1.95.0",
+    "@supabase/supabase-js": "^2.45.0",
     "express": "^4.18.2",
+    "pino": "^9.2.0",
     "socket.io": "^4.8.1",
     "uuid": "^9.0.1"
   },
   "devDependencies": {
-    "nodemon": "^3.0.3"
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.0",
+    "tsx": "^4.15.0",
+    "typescript": "^5.5.0"
   }
 } 

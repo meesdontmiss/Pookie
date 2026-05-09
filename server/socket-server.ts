@@ -21,7 +21,43 @@ import pino from 'pino'
 
 type LobbyId = string
 type Wallet = string
+type MatchId = string
 type GamePhase = 'WAITING' | 'STARTING_COUNTDOWN' | 'ACTIVE' | 'ROUND_OVER' | 'GAME_OVER'
+
+// --- Rate limiter per socket ---
+class SocketRateLimiter {
+  private buckets = new Map<string, { count: number; resetAt: number }>()
+  private readonly limits: Record<string, { maxPerWindow: number; windowMs: number }> = {
+    'playerStateUpdate': { maxPerWindow: 15, windowMs: 1000 },  // 15/s (client sends ~10/s)
+    'playerPush':        { maxPerWindow: 3, windowMs: 2000 },   // 3 per 2s
+    'message':           { maxPerWindow: 10, windowMs: 1000 },  // 10/s for lobby actions
+    'default':           { maxPerWindow: 20, windowMs: 1000 },  // 20/s general
+  }
+
+  check(socketId: string, event: string): boolean {
+    const key = `${socketId}:${event}`
+    const now = Date.now()
+    const limit = this.limits[event] || this.limits['default']
+    let bucket = this.buckets.get(key)
+    if (!bucket || now >= bucket.resetAt) {
+      bucket = { count: 0, resetAt: now + limit.windowMs }
+      this.buckets.set(key, bucket)
+    }
+    bucket.count++
+    return bucket.count <= limit.maxPerWindow
+  }
+
+  // Periodically clean up stale buckets
+  cleanup() {
+    const now = Date.now()
+    for (const [key, bucket] of this.buckets) {
+      if (now >= bucket.resetAt + 5000) this.buckets.delete(key)
+    }
+  }
+}
+
+const rateLimiter = new SocketRateLimiter()
+setInterval(() => rateLimiter.cleanup(), 30000)
 
 interface GameStatusUpdatePayloadPayload {
   gameState: GamePhase
@@ -81,7 +117,6 @@ const io = new Server(server, {
 })
 
 // Active matches (for payout after game end)
-type MatchId = string
 interface ActiveMatch {
   id: MatchId
   lobbyId: LobbyId
@@ -474,6 +509,12 @@ async function finishMatch(matchId: MatchId, winnerWallet?: string) {
     logger.info({ matchId }, 'Match cancelled')
   }
   io.to(matchId).emit('match_finished', { matchId, winner: winnerWallet ?? null })
+
+  // Reset lobby status back to 'open' so new players can join
+  const lobbyId = match.lobbyId
+  if (lobbyId) {
+    fireAndForget(updateLobbyStatusDb(lobbyId, 'open'), 'updateLobbyStatusDb', { lobbyId, status: 'open' })
+  }
 }
 
 function handlePlayerStateUpdate(matchId: MatchId, wallet: Wallet, position: [number, number, number], rotation: [number, number, number, number]) {
@@ -716,6 +757,25 @@ function walletShort(wallet: string) {
   return wallet.length > 8 ? `${wallet.slice(0, 4)}...${wallet.slice(-4)}` : wallet
 }
 
+// --- Lobby counts broadcast (drives "X LIVE" badges in lobby browser) ---
+function getLobbyCountsSnapshot(): Record<string, { liveHumans: number; liveTotal: number }> {
+  const counts: Record<string, { liveHumans: number; liveTotal: number }> = {}
+  for (const [id, lobby] of lobbies.entries()) {
+    const players = Array.from(lobby.players.values())
+    const humans = players.filter((p) => !p.isAi).length
+    counts[id] = { liveHumans: humans, liveTotal: players.length }
+  }
+  return counts
+}
+
+function broadcastLobbyCounts(lobbyId: LobbyId) {
+  const lobby = lobbies.get(lobbyId)
+  if (!lobby) return
+  const players = Array.from(lobby.players.values())
+  const humans = players.filter((p) => !p.isAi).length
+  io.emit('lobby_counts', { id: lobbyId, liveHumans: humans, liveTotal: players.length })
+}
+
 function broadcastLobby(lobby: LobbyState) {
   const players: UIRoomPlayer[] = Array.from(lobby.players.values()).map((p) => ({
     id: p.wallet,
@@ -907,10 +967,16 @@ function startMatch(lobby: LobbyState) {
   fireAndForget(syncLobbyPlayerCountDb(lobby.id), 'syncLobbyPlayerCountDb', { lobbyId: lobby.id })
   clearCountdown(lobby)
   broadcastLobby(lobby)
+  broadcastLobbyCounts(lobby.id)
   fireAndForget(updateLobbyStatusDb(lobby.id, 'in_match'), 'updateLobbyStatusDb', { lobbyId: lobby.id, status: 'in_match' })
 }
 
 io.on('connection', (socket) => {
+  // Provide lobby counts snapshot on demand
+  socket.on('get_lobby_counts', () => {
+    socket.emit('lobby_counts_snapshot', { counts: getLobbyCountsSnapshot() })
+  })
+
   // Optional identity registration ACK (client emits this)
   socket.on('register_identity', (wallet: string) => {
     try {
@@ -942,6 +1008,7 @@ io.on('connection', (socket) => {
   })
 
   socket.on('message', async (data: ClientToServer) => {
+    if (!rateLimiter.check(socket.id, 'message')) return
     try {
       if (data.type === 'join_lobby') {
         const lobby = lobbies.get(data.lobbyId)
@@ -961,6 +1028,7 @@ io.on('connection', (socket) => {
         socketToLobby.set(socket.id, lobby.id)
         ;(socket.data as any).wallet = data.wallet
         broadcastLobby(lobby)
+        broadcastLobbyCounts(lobby.id)
         fireAndForget(upsertLobbyPlayerRecord(lobby.id, playerState), 'upsertLobbyPlayerRecord', { lobbyId: lobby.id, wallet: data.wallet })
         fireAndForget(syncLobbyPlayerCountDb(lobby.id), 'syncLobbyPlayerCountDb', { lobbyId: lobby.id })
         metrics.lobbyJoins += 1
@@ -1133,6 +1201,7 @@ io.on('connection', (socket) => {
         await socket.leave(lobby.id)
         fireAndForget(syncLobbyPlayerCountDb(lobby.id), 'syncLobbyPlayerCountDb', { lobbyId: lobby.id })
         broadcastLobby(lobby)
+        broadcastLobbyCounts(lobby.id)
         metrics.lobbyLeaves += 1
         logger.info({ lobbyId: lobby.id, socketId: socket.id }, 'Player left lobby')
       }
@@ -1171,8 +1240,24 @@ io.on('connection', (socket) => {
     } catch {}
   })
 
+  // Relay push events to other participants in the match room
+  socket.on('playerPush', (data: { position: [number, number, number]; direction: [number, number, number] }) => {
+    if (!rateLimiter.check(socket.id, 'playerPush')) return
+    try {
+      const matchId = socketToMatch.get(socket.id)
+      const wallet = (socket.data as any)?.wallet || ''
+      if (!matchId || !wallet) return
+      socket.to(matchId).emit('playerPush', {
+        playerId: String(wallet).toLowerCase(),
+        position: data.position,
+        direction: data.direction,
+      })
+    } catch {}
+  })
+
   // Relay player kinematic state to other participants (basic authoritative echo)
   socket.on('playerStateUpdate', (data: { position: [number, number, number]; rotation: [number, number, number, number] }) => {
+    if (!rateLimiter.check(socket.id, 'playerStateUpdate')) return
     try {
       const matchId = socketToMatch.get(socket.id)
       const wallet = (socket.data as any)?.wallet || ''
@@ -1192,6 +1277,22 @@ io.on('connection', (socket) => {
       let changed = false
       for (const [wallet, p] of lobby.players.entries()) {
         if (p.socketId === socket.id) {
+          // Refund if paid lobby, wager locked, and match hasn't started yet
+          if (lobby.wager > 0 && p.wagerLocked && !p.refunded && p.escrowAddress && p.wagerAmountSol) {
+            const sigKey = p.txSignature || `${wallet}-${lobby.id}`
+            if (sigKey && !processedRefunds.has(sigKey)) {
+              enqueuePaymentJob('refund', {
+                escrowPublicKey: p.escrowAddress,
+                playerPublicKey: wallet,
+                amountSol: p.wagerAmountSol,
+                txSignatureKey: sigKey,
+                description: 'Auto-refund: player disconnected',
+              }).catch((e) => console.error('❌ enqueue refund failed', e))
+              processedRefunds.add(sigKey)
+              metrics.refundsQueued += 1
+              logger.info({ lobbyId: lobby.id, wallet, amount: p.wagerAmountSol }, 'Refund queued (disconnect)')
+            }
+          }
           lobby.players.delete(wallet)
           changed = true
           fireAndForget(removeLobbyPlayerRecord(lobby.id, wallet), 'removeLobbyPlayerRecord', { lobbyId: lobby.id, wallet })
@@ -1200,6 +1301,7 @@ io.on('connection', (socket) => {
       if (changed) {
         fireAndForget(syncLobbyPlayerCountDb(lobby.id), 'syncLobbyPlayerCountDb', { lobbyId: lobby.id })
         broadcastLobby(lobby)
+        broadcastLobbyCounts(lobby.id)
         metrics.lobbyLeaves += 1
         logger.info({ lobbyId: lobby.id }, 'Player disconnected from lobby')
       }
@@ -1227,7 +1329,7 @@ app.get('/health', (_req, res) => res.json({ ok: true, metrics }))
 server.listen(PORT, () => logger.info({ port: PORT }, 'sumo socket listening'))
 
 // AI movement logic
-function updateAIPlayers(match: MatchState) {
+function updateAIPlayers(match: ActiveMatch) {
   const platformRadius = 20
   const platformHeight = 4
   const aiPlayers = (match.roster || []).filter((r) => r.isAi)
@@ -1264,12 +1366,26 @@ function updateAIPlayers(match: MatchState) {
 }
 
 const MATCH_TICK_INTERVAL_MS = 1000
+const MATCH_TIMEOUT_SECONDS = Number(process.env.MATCH_TIMEOUT_SECONDS ?? '180') // 3 minutes default
+
 setInterval(() => {
   for (const [matchId, match] of activeMatches.entries()) {
+    if (match.finished) continue
+
     // Update AI positions
     updateAIPlayers(match)
     
     const elapsedSeconds = Math.floor((Date.now() - (match.startedAt || Date.now())) / 1000)
+
+    // Auto-end match after timeout - last player standing wins
+    if (elapsedSeconds >= MATCH_TIMEOUT_SECONDS) {
+      const alive = getAlivePlayers(match)
+      const winner = alive.length > 0 ? alive[0].wallet : undefined
+      logger.warn({ matchId, elapsedSeconds, winner }, 'Match timed out, forcing finish')
+      void finishMatch(matchId, winner)
+      continue
+    }
+
     const playersPayload = Array.from(match.playerStates.entries()).map(([id, state]) => ({
       id,
       username: match.roster?.find((p) => p.wallet === id)?.username || id,
@@ -1278,9 +1394,9 @@ setInterval(() => {
       quaternion: { x: state.rotation[0], y: state.rotation[1], z: state.rotation[2], w: state.rotation[3] },
     }))
     const payload: GameStatusUpdatePayloadPayload = {
-      gameState: match.finished ? 'GAME_OVER' : 'ACTIVE',
+      gameState: 'ACTIVE',
       countdown: null,
-      message: `Elapsed ${elapsedSeconds}s`,
+      message: `${MATCH_TIMEOUT_SECONDS - elapsedSeconds}s remaining`,
       players: playersPayload,
     }
     io.to(matchId).emit('gameStatusUpdate', payload)
