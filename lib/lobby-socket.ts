@@ -427,6 +427,11 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
     socketRef.current.emit('message', { type: 'match_result', matchId, winnerWallet } as any)
   }
 
-  return { state, confirmWager, setReady, adminEndMatch, reportMatchResult }
+  const selectColor = (color: string) => {
+    if (!socketRef.current || !lobbyId) return
+    socketRef.current.emit('message', { type: 'select_color', lobbyId, color } as ClientToServer)
+  }
+
+  return { state, confirmWager, setReady, adminEndMatch, reportMatchResult, selectColor }
 }
 

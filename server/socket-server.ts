@@ -84,6 +84,7 @@ interface PlayerState {
   wagerAmountSol?: number
   refunded?: boolean
   isAi?: boolean
+  ballColor?: string
 }
 
 interface LobbyState {
@@ -122,7 +123,7 @@ interface ActiveMatch {
   lobbyId: LobbyId
   wagerPerPlayer: number
   players: Array<{ wallet: string; username: string; escrowAddress: string; amountSol: number }>
-  roster?: Array<{ wallet: string; username: string; isAi?: boolean }>
+  roster?: Array<{ wallet: string; username: string; isAi?: boolean; ballColor?: string }>
   startedAt?: number
   playerStates: Map<Wallet, PlayerRuntimeState>
   eliminated: Set<Wallet>
@@ -301,7 +302,7 @@ async function resetLobbyPlayers() {
 
 resetLobbyPlayers().catch((error) => console.error('[supabase] Reset players error', error))
 
-async function recordMatchStart(matchId: MatchId, lobbyId: LobbyId, gameMode: string, seed: number, roster: Array<{ wallet: string; username: string; isAi?: boolean }>) {
+async function recordMatchStart(matchId: MatchId, lobbyId: LobbyId, gameMode: string, seed: number, roster: Array<{ wallet: string; username: string; isAi?: boolean; ballColor?: string }>) {
   try {
     await getSupabase()
       .from('match_state')
@@ -784,6 +785,7 @@ function broadcastLobby(lobby: LobbyState) {
     wager: lobby.wager,
     wagerConfirmed: p.wagerLocked,
     ready: p.ready,
+    ballColor: p.ballColor,
   }))
   const message: ServerToClient = {
     type: 'lobby_state',
@@ -914,11 +916,11 @@ function startMatch(lobby: LobbyState) {
         escrowAddress: p.escrowAddress as string,
         amountSol: p.wagerAmountSol ?? lobby.wager,
       })),
-    roster: players.map((p) => ({ wallet: p.wallet, username: p.username, isAi: Boolean(p.isAi) })),
+    roster: players.map((p) => ({ wallet: p.wallet, username: p.username, isAi: Boolean(p.isAi), ballColor: p.ballColor || '#ff66cc' })),
     startedAt: Date.now(),
+    playerStates: new Map<Wallet, PlayerRuntimeState>(),
+    eliminated: new Set<Wallet>(),
   }
-  snapshot.playerStates = new Map<Wallet, PlayerRuntimeState>()
-  snapshot.eliminated = new Set<Wallet>()
   const platformRadius = 20
   const platformHeight = 4
   const roster = snapshot.roster ?? []
@@ -953,6 +955,7 @@ function startMatch(lobby: LobbyState) {
       skin: 'default',
       spawnIndex: i,
       isAi: Boolean(p.isAi),
+      ballColor: p.ballColor || '#ff66cc',
     })),
     wagerAmount: lobby.wager,
     gameMode,
@@ -996,6 +999,7 @@ io.on('connection', (socket) => {
       wager: lobby.wager,
       wagerConfirmed: p.wagerLocked,
       ready: p.ready,
+      ballColor: p.ballColor,
     }))
     const message: ServerToClient = {
       type: 'lobby_state',
@@ -1136,6 +1140,23 @@ io.on('connection', (socket) => {
         }
         tryStartCountdown(lobby)
       }
+      if (data.type === 'select_color') {
+        const lobby = lobbies.get(data.lobbyId); if (!lobby) return
+        const player = Array.from(lobby.players.values()).find((x) => x.socketId === socket.id)
+        if (!player) return
+        const color = data.color
+        // Check if color is already taken by another player in this lobby
+        const taken = Array.from(lobby.players.values()).some(
+          (p) => p.wallet !== player.wallet && p.ballColor === color
+        )
+        if (taken) {
+          socket.emit('message', { type: 'error', message: 'Color already taken', code: 'ERR_COLOR_TAKEN' } as ServerToClient)
+          return
+        }
+        player.ballColor = color
+        broadcastLobby(lobby)
+        logger.info({ lobbyId: lobby.id, wallet: player.wallet, color }, 'Player selected color')
+      }
       if (data.type === 'admin_end_match') {
         // Admin-only manual payout trigger
         // Determine caller wallet by socket
@@ -1234,6 +1255,7 @@ io.on('connection', (socket) => {
             quaternion: state ? { x: state.rotation[0], y: state.rotation[1], z: state.rotation[2], w: state.rotation[3] } : { x: 0, y: 0, z: 0, w: 1 },
             username: r.username,
             status: state?.status || 'In',
+            ballColor: r.ballColor || '#ff66cc',
           }
         }),
       })
@@ -1262,10 +1284,14 @@ io.on('connection', (socket) => {
       const matchId = socketToMatch.get(socket.id)
       const wallet = (socket.data as any)?.wallet || ''
       if (!matchId || !wallet) return
+      // Look up player's ballColor from the match snapshot
+      const matchSnap = activeMatches.get(matchId)
+      const playerColor = matchSnap?.roster?.find((r: any) => String(r.wallet || r.id || '').toLowerCase() === String(wallet).toLowerCase())?.ballColor
       socket.to(matchId).emit('playerStateUpdate', {
         playerId: String(wallet).toLowerCase(),
         position: data.position,
         rotation: data.rotation,
+        ballColor: playerColor || '#ff66cc',
       })
       handlePlayerStateUpdate(matchId, String(wallet), data.position, data.rotation)
     } catch {}
@@ -1392,6 +1418,7 @@ setInterval(() => {
       status: state.status,
       position: { x: state.position[0], y: state.position[1], z: state.position[2] },
       quaternion: { x: state.rotation[0], y: state.rotation[1], z: state.rotation[2], w: state.rotation[3] },
+      ballColor: match.roster?.find((p) => p.wallet === id)?.ballColor || '#ff66cc',
     }))
     const payload: GameStatusUpdatePayloadPayload = {
       gameState: 'ACTIVE',

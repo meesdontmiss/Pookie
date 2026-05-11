@@ -11,7 +11,6 @@ import { useKeyboardControls } from '@react-three/drei'; // For keyboard control
 import io, { Socket } from 'socket.io-client'; // Added socket.io-client
 import PushEffect from '../../effects/PushEffect'; // Import the new effect
 import MobileControls from './MobileControls';
-import { getSelectedSkinId, getSkinById, DEFAULT_SKIN } from '@/shared/skins';
 
 // Preload the Pookie model
 useGLTF.preload('/models/POOKIE.glb');
@@ -59,9 +58,6 @@ interface PlayerProps {
   onPushAction?: (pusherPosition: THREE.Vector3, pusherRef: React.RefObject<any>) => void; // New callback
   platformHeightActual: number; // New: Pass platformHeight for accurate calculations
   mobileInputRef?: React.RefObject<{ x: number; y: number; jump: boolean; push: boolean }>; // Mobile touch input
-  skinModelPath?: string;
-  skinScale?: number;
-  skinOffsetY?: number;
 }
 
 // Define LivePlayer interface for HUD
@@ -118,11 +114,10 @@ interface AIPlayerState {
 
 // Player Component - Now uses React.forwardRef and React.memo
 const Player = React.memo(React.forwardRef<any, PlayerProps>((
-  { ballColor, socket, isSpectatingOrEliminated, onFallenOff, username, initialPosition, initialYawAngle, onPushAction, platformHeightActual, mobileInputRef, skinModelPath, skinScale, skinOffsetY }, 
+  { ballColor, socket, isSpectatingOrEliminated, onFallenOff, username, initialPosition, initialYawAngle, onPushAction, platformHeightActual, mobileInputRef }, 
   ref // This ref will be attached to the RigidBody
 ) => {
-  const modelPath = skinModelPath || '/models/POOKIE.glb';
-  const { scene: pookieScene } = useGLTF(modelPath);
+  const { scene: pookieScene } = useGLTF('/models/POOKIE.glb');
   const { camera } = useThree(); // Get camera for initial setup
   const initialCameraSetupDone = useRef(false); // Ensure one-time setup
   // Reverted to original simpler useState initialization
@@ -143,8 +138,8 @@ const Player = React.memo(React.forwardRef<any, PlayerProps>((
 
   const playerRadius = 0.7;
   const MAX_LINEAR_VELOCITY = 10;
-  const pookieModelScale = skinScale ?? 0.25;
-  const pookieModelPositionOffset = new THREE.Vector3(0, skinOffsetY ?? (-playerRadius * 0.65), 0);
+  const pookieModelScale = 0.25;
+  const pookieModelPositionOffset = new THREE.Vector3(0, -playerRadius * 0.65, 0);
   const hasFallenOff = useRef(false);
   const isLocalPlayerInstance = !!onPushAction; // Determine if this is the local player
 
@@ -1168,8 +1163,8 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
   const [isSpectatorCamActive, setIsSpectatorCamActive] = useState(false);
   const [localSpawnPosition, setLocalSpawnPosition] = useState<[number, number, number] | null>(null);
   const [activePushEffects, setActivePushEffects] = useState<Array<{ id: string; position: THREE.Vector3; color: string }>>([]);
+  const [localBallColor, setLocalBallColor] = useState<string>('#ff66cc');
   const mobileInputRef = useRef<{ x: number; y: number; jump: boolean; push: boolean }>({ x: 0, y: 0, jump: false, push: false });
-  const selectedSkin = useMemo(() => getSkinById(getSelectedSkinId()), []);
   const localPlayerRef = useRef<any>(null);
   const localPlayerId = useMemo(
     () => playerWalletAddress || localUsername || '',
@@ -1238,6 +1233,11 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
             quaternion: p.quaternion || { x: 0, y: 0, z: 0, w: 1 },
             username: p.username || wallet,
             status: p.status,
+            ballColor: (p as any).ballColor,
+          }
+          // Capture local player's ball color from server
+          if (localPlayerId && wallet.toLowerCase() === localPlayerId.toLowerCase() && (p as any).ballColor) {
+            setLocalBallColor((p as any).ballColor)
           }
           return {
             id: wallet,
@@ -1256,7 +1256,7 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
     socket.on('gameStatusUpdate', handleGameStatusUpdate);
     
     // Real-time player movement updates (10Hz from other clients)
-    socket.on('playerStateUpdate', ({ playerId, position, rotation }: { playerId: string; position: [number, number, number]; rotation: [number, number, number, number] }) => {
+    socket.on('playerStateUpdate', ({ playerId, position, rotation, ballColor }: { playerId: string; position: [number, number, number]; rotation: [number, number, number, number]; ballColor?: string }) => {
       setRemotePlayerEntities((prev) => {
         const existing = prev[playerId]
         if (!existing) return prev // Only update known players
@@ -1266,6 +1266,7 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
             ...existing,
             position: { x: position[0], y: position[1], z: position[2] },
             quaternion: { x: rotation[0], y: rotation[1], z: rotation[2], w: rotation[3] },
+            ballColor: ballColor || existing.ballColor,
           },
         }
       })
@@ -1462,7 +1463,7 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
           {socket && localPlayerId && (
             <Player
               ref={localPlayerRef}
-              ballColor="#ff66cc"
+              ballColor={localBallColor}
               socket={socket}
               isSpectatingOrEliminated={localPlayerGameStatus !== 'InGame'}
               onFallenOff={handleLocalFallenOff}
@@ -1472,9 +1473,6 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
               onPushAction={handlePushAction}
               platformHeightActual={platformHeight}
               mobileInputRef={mobileInputRef}
-              skinModelPath={selectedSkin.modelPath}
-              skinScale={selectedSkin.scale}
-              skinOffsetY={selectedSkin.offsetY}
             />
           )}
 
@@ -1488,7 +1486,7 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
                 playerId={p.id}
                 targetPosition={[p.position.x, p.position.y, p.position.z]}
                 targetRotation={[p.quaternion.x, p.quaternion.y, p.quaternion.z, p.quaternion.w]}
-                ballColor="#9ae6ff"
+                ballColor={p.ballColor || '#9ae6ff'}
                 username={p.username}
                 visible={p.status === 'In'}
               />

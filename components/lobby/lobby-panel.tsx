@@ -3,6 +3,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { HardLobby } from '@/shared/hardcoded-lobbies'
+import { BALL_COLORS } from '@/shared/contracts'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { useLobbySocket } from '@/lib/lobby-socket'
 import { useGuestIdentity, getCurrentPlayerId } from '@/hooks/use-guest-identity'
@@ -16,6 +17,7 @@ interface PlayerRow {
   wager: number
   wagerConfirmed: boolean
   ready: boolean
+  ballColor?: string
 }
 
 export default function LobbyPanel({
@@ -33,7 +35,7 @@ export default function LobbyPanel({
   const guestId = useGuestIdentity()
   const walletAddress = publicKey?.toBase58() ?? guestId
   const myName = 'Player'
-  const { state, confirmWager, setReady, adminEndMatch } = useLobbySocket(lobby?.id ?? null, myName, walletAddress, (lobby?.wager ?? 0) === 0)
+  const { state, confirmWager, setReady, adminEndMatch, selectColor } = useLobbySocket(lobby?.id ?? null, myName, walletAddress, (lobby?.wager ?? 0) === 0)
   const { executeWager, isLoading: isWagerLoading, error: wagerError, reset: resetWager } = useWager()
   
   const [myReady, setMyReady] = useState(false)
@@ -88,6 +90,7 @@ export default function LobbyPanel({
         wager: p.wager,
         wagerConfirmed: p.wagerConfirmed,
         ready: p.ready,
+        ballColor: p.ballColor,
       }))
     }
     return []
@@ -346,6 +349,40 @@ export default function LobbyPanel({
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* Ball Color Picker */}
+        <div className="flex-shrink-0 px-2 py-2 border-b border-white/10">
+          <p className="text-[10px] text-white/70 mb-1.5 font-semibold">Choose Ball Color</p>
+          <div className="flex flex-wrap gap-1.5">
+            {BALL_COLORS.map((c) => {
+              const takenBy = players.find((p) => p.ballColor === c.hex && p.id !== currentPlayerId)
+              const isSelected = currentPlayer?.ballColor === c.hex
+              return (
+                <button
+                  key={c.id}
+                  title={takenBy ? `${c.name} — taken by ${takenBy.username}` : c.name}
+                  disabled={!!takenBy}
+                  onClick={() => selectColor(c.hex)}
+                  className={`w-7 h-7 rounded-full border-2 transition-all relative ${
+                    isSelected
+                      ? 'border-white scale-110 shadow-[0_0_8px_rgba(255,255,255,0.5)]'
+                      : takenBy
+                      ? 'border-white/10 opacity-30 cursor-not-allowed'
+                      : 'border-white/20 hover:border-white/60 hover:scale-105 cursor-pointer'
+                  }`}
+                  style={{ backgroundColor: c.hex }}
+                >
+                  {isSelected && (
+                    <Check className="absolute inset-0 m-auto h-3.5 w-3.5 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]" />
+                  )}
+                  {takenBy && !isSelected && (
+                    <X className="absolute inset-0 m-auto h-3 w-3 text-white/70" />
+                  )}
+                </button>
+              )
+            })}
           </div>
         </div>
 
