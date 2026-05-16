@@ -5,9 +5,12 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "typecheck:active": "tsc -p tsconfig.active.json --noEmit",
     "start": "next start",
     "lint": "next lint",
     "start:server": "tsx server/socket-server.ts",
+    "start:poker-server": "tsx server/pookie-poker-server.ts",
+    "test:poker": "tsx server/poker-engine/tests/poker-engine.test.ts",
     "prepare-text-generation": "node ./scripts/prepare-text-generation.js",
     "db:generate": "drizzle-kit generate",
     "stress": "node scripts/stress-test.js"

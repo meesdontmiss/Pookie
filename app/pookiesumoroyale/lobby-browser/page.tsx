@@ -1,28 +1,32 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useWallet } from '@solana/wallet-adapter-react';
 import { motion } from 'framer-motion';
-import { Loader2, ShieldCheck, Users, Flame, Eye } from 'lucide-react';
+import { Bot, ShieldCheck, Users, Flame } from 'lucide-react';
 import CinematicVideoBg from '@/components/lobby/cinematic-video-bg';
 import { HARDCODED_LOBBIES, HardLobby } from '@/shared/hardcoded-lobbies'
 import LobbyPanel from '@/components/lobby/lobby-panel'
 import styles from './lobby.module.css'
 import { useLobbyCounts } from '@/hooks/use-lobby-counts'
-import { useGuestIdentity } from '@/hooks/use-guest-identity'
 import { History } from 'lucide-react'
+
+type CpuDifficulty = 'easy' | 'normal' | 'hard'
+
+const CPU_DIFFICULTIES: Array<{ value: CpuDifficulty; label: string }> = [
+  { value: 'easy', label: 'Easy' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'hard', label: 'Hard' },
+]
 
 export default function LobbyBrowserPage() {
   const router = useRouter();
-  const { publicKey } = useWallet();
-  const guestId = useGuestIdentity();
-  const walletAddress = publicKey?.toBase58() ?? guestId;
 
   const [isLoading, setIsLoading] = useState(true);
   const [panelOpen, setPanelOpen] = useState(false)
   const [activeLobby, setActiveLobby] = useState<HardLobby | null>(null)
   const [isJoining, setIsJoining] = useState<string | null>(null);
+  const [cpuDifficulty, setCpuDifficulty] = useState<CpuDifficulty>('normal')
   
   // Subscribe to live lobby counts
   const lobbyCounts = useLobbyCounts()
@@ -47,6 +51,10 @@ export default function LobbyBrowserPage() {
     const found = HARDCODED_LOBBIES.find(l => l.id === lobbyId) || null
     setActiveLobby(found)
     setPanelOpen(true)
+  }
+
+  const handleSoloPractice = () => {
+    router.push(`/pookiesumoroyale/game/offline-practice?practice=true&offline=true&cpu=${cpuDifficulty}`)
   }
 
   return (
@@ -90,15 +98,38 @@ export default function LobbyBrowserPage() {
                       <p className="text-xs text-white">House-hosted lobbies with fair matchmaking</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-            <button
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-black/45 p-1">
+                      {CPU_DIFFICULTIES.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setCpuDifficulty(option.value)}
+                          className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                            cpuDifficulty === option.value
+                              ? 'bg-lime-300 text-slate-950'
+                              : 'text-white/75 hover:text-white hover:bg-white/10'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={handleSoloPractice}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-lime-400/30 text-lime-200 bg-black/60 hover:bg-lime-900/25 cursor-pointer flex items-center gap-1 transition-all"
+                    >
+                      <Bot className="h-3.5 w-3.5" />
+                      Solo Practice
+                    </button>
+                    <button
                       onClick={() => router.push('/pookiesumoroyale/match-history')}
                       className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-cyan-600/30 text-cyan-400 bg-black/60 hover:bg-cyan-900/30 cursor-pointer flex items-center gap-1 transition-all"
                     >
                       <History className="h-3.5 w-3.5" />
                       Match History
-            </button>
-          </div>
+                    </button>
+                  </div>
                 </div>
               </div>
 

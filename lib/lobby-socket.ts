@@ -13,9 +13,23 @@ export interface LobbySocketState {
 }
 
 const ENABLE_HTTP_FALLBACK = process.env.NEXT_PUBLIC_LOBBY_HTTP_FALLBACK === 'true'
+const INITIAL_LOBBY_SOCKET_STATE: LobbySocketState = {
+  players: [],
+  countdown: null,
+  status: 'open',
+  connected: false,
+}
+
+function toPlayerId(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function walletShort(wallet: string) {
+  return wallet.length > 8 ? `${wallet.slice(0, 4)}...${wallet.slice(-4)}` : wallet
+}
 
 export function useLobbySocket(lobbyId: string | null, username: string | null, wallet: string | null, isPractice: boolean = false) {
-  const [state, setState] = useState<LobbySocketState>({ players: [], countdown: null, status: 'open', connected: false })
+  const [state, setState] = useState<LobbySocketState>(INITIAL_LOBBY_SOCKET_STATE)
   const socketRef = useRef<Socket | null>(null)
   const reconnectAttemptsRef = useRef(0)
   const httpPollTimerRef = useRef<number | null>(null)
@@ -38,7 +52,14 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
   const currentUrlIdxRef = useRef(0)
 
   useEffect(() => {
-    if (!lobbyId) return
+    const playerId = toPlayerId(wallet)
+    if (!lobbyId || !playerId) {
+      setState(INITIAL_LOBBY_SOCKET_STATE)
+      return
+    }
+    // Reset stale state before connecting with a new lobby or player identity.
+    setState(INITIAL_LOBBY_SOCKET_STATE)
+    reconnectAttemptsRef.current = 0
     
     const isProd = process.env.NODE_ENV === 'production'
     // Use /api/socketio to match working Cock Combat implementation
@@ -63,29 +84,12 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
     const startHttpFallback = async () => {
       if (!ENABLE_HTTP_FALLBACK || !lobbyId || httpJoinedRef.current) return
       try {
-        // Resolve identity similar to socket path
-        let effectiveWallet = wallet && typeof wallet === 'string' ? wallet : null
-        if (!effectiveWallet && typeof window !== 'undefined') {
-          effectiveWallet = localStorage.getItem('guest_id') || (window as any).__guestId || null
-        }
-        if (!effectiveWallet) {
-          const rnd =
-            (typeof window !== 'undefined' && (window.crypto as any)?.randomUUID?.()) ||
-            Math.random().toString(36).slice(2, 12)
-          effectiveWallet = `guest_${rnd}`
-          try {
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('guest_id', effectiveWallet)
-              ;(window as any).__guestId = effectiveWallet
-            }
-          } catch {}
-        }
         const effectiveUsername = username || 'Player'
         // Join (create/update) player
         const res = await fetch(`/api/lobbies/${encodeURIComponent(lobbyId)}/players`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ walletAddress: effectiveWallet, username: effectiveUsername }),
+          body: JSON.stringify({ walletAddress: playerId, username: effectiveUsername }),
         })
         const data = await res.json().catch(() => null as any)
         if (res.ok && data?.player?.id) {
@@ -102,12 +106,11 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
           const d = await r.json().catch(() => null as any)
           const rows = Array.isArray(d?.players) ? d.players : []
           const mapped: UIRoomPlayer[] = rows.map((p: any) => {
-            const wid = String(p.wallet_address || p.id || '').toLowerCase()
-            const wshort = wid ? `${wid.slice(0, 4)}...${wid.slice(-4)}` : ''
+            const wid = toPlayerId(p.wallet_address || p.id)
             return {
               id: wid,
               username: String(p.username || 'Player'),
-              walletShort: wshort,
+              walletShort: walletShort(wid),
               wager: 0,
               wagerConfirmed: Boolean(p.wager_confirmed),
               ready: Boolean(p.is_ready),
@@ -139,44 +142,15 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
           }
         } catch {}
         
-        // Resolve wallet identity (guest-safe)
-        let effectiveWallet = wallet && typeof wallet === 'string' ? wallet : null
-        try {
-          if (!effectiveWallet && typeof window !== 'undefined') {
-            effectiveWallet =
-              (localStorage.getItem('guest_id') ||
-                (window as any).__guestId ||
-                null)
-          }
-          if (!effectiveWallet) {
-            const rnd =
-              (typeof window !== 'undefined' &&
-                (window.crypto as any)?.randomUUID?.()) ||
-              Math.random().toString(36).slice(2, 12)
-            effectiveWallet = `guest_${rnd}`
-            try {
-              if (typeof window !== 'undefined') {
-                localStorage.setItem('guest_id', effectiveWallet)
-                ;(window as any).__guestId = effectiveWallet
-              }
-            } catch {}
-          }
-        } catch {}
-
         // Register identity (ack optional)
-        if (effectiveWallet) {
-          s.emit('register_identity', String(effectiveWallet).toLowerCase())
-        }
+        s.emit('register_identity', playerId)
 
         // Join lobby after identity resolution
         const effectiveUsername = username || 'Player'
-        if (effectiveWallet && effectiveUsername) {
-          const join: ClientToServer = { type: 'join_lobby', lobbyId, username: effectiveUsername, wallet: String(effectiveWallet) }
-          s.emit('message', join)
-          // Cock Combat compatibility: also join room and request snapshot via classic events
-          try { s.emit('join_lobby_room', lobbyId) } catch {}
-          try { s.emit('get_lobby_state', lobbyId) } catch {}
-        }
+        const join: ClientToServer = { type: 'join_lobby', lobbyId, username: effectiveUsername, wallet: playerId }
+        s.emit('message', join)
+        // Cock Combat compatibility: also join room and request snapshot via classic events
+        try { s.emit('join_lobby_room', lobbyId) } catch {}
         
         // Request initial state
         s.emit('get_lobby_state', lobbyId)
@@ -257,9 +231,7 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
 
         // As last resort, start HTTP fallback join + polling
         try {
-          if (!state.connected) {
-            setTimeout(() => { startHttpFallback() }, 500)
-          }
+          if (!s.connected) setTimeout(() => { startHttpFallback() }, 500)
         } catch {}
       })
 
@@ -290,12 +262,11 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
           if (!payload || (payload.lobbyId && payload.lobbyId !== lobbyId)) return
           const rows = Array.isArray(payload.players) ? payload.players : []
           const mapped: UIRoomPlayer[] = rows.map((p: any) => {
-            const id = String(p.playerId || '').toLowerCase()
-            const short = id ? `${id.slice(0, 4)}...${id.slice(-4)}` : ''
+            const id = toPlayerId(p.playerId)
             return {
               id,
               username: p.username || (id ? id.slice(0, 8) + '...' : 'Player'),
-              walletShort: short,
+              walletShort: walletShort(id),
               wager: 0,
               wagerConfirmed: Boolean(p.hasWagered || p.isReady),
               ready: Boolean(p.isReady),
@@ -308,11 +279,12 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
         try {
           const eventLobbyId = String((data && (data as any).lobbyId) || '')
           if (eventLobbyId && eventLobbyId !== lobbyId) return
-          const pid = String(data?.playerId || '').toLowerCase()
+          const pid = toPlayerId(data?.playerId)
+          if (!pid) return
           const isReady = Boolean(data?.isReady)
           setState(prev => ({
             ...prev,
-            players: prev.players.map(p => p.id === pid ? { ...p, ready: isReady } : p),
+            players: prev.players.map(p => p.id.toLowerCase() === pid.toLowerCase() ? { ...p, ready: isReady } : p),
           }))
         } catch {}
       })
@@ -321,12 +293,11 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
           if (!payload || payload.id !== lobbyId) return
           const rows = Array.isArray(payload.players) ? payload.players : []
           const mapped: UIRoomPlayer[] = rows.map((p: any) => {
-            const id = String(p.playerId || '').toLowerCase()
-            const short = id ? `${id.slice(0, 4)}...${id.slice(-4)}` : ''
+            const id = toPlayerId(p.playerId)
             return {
               id,
               username: (p.username && p.username.trim()) || (id ? id.slice(0, 8) + '...' : 'Player'),
-              walletShort: short,
+              walletShort: walletShort(id),
               wager: 0,
               wagerConfirmed: Boolean(p.hasWagered || p.isReady),
               ready: Boolean(p.isReady),
@@ -341,14 +312,13 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
           const rows = Array.isArray(playersArr) ? playersArr : []
           const mapped: UIRoomPlayer[] = rows.map((p: any) => {
             // server/index.js uses socket.id + optional solanaPublicKey/username
-            const raw = String(p.solanaPublicKey || p.id || '').toLowerCase()
-            const id = raw || (typeof p.playerId === 'string' ? p.playerId.toLowerCase() : '')
-            const short = id ? `${id.slice(0, 4)}...${id.slice(-4)}` : ''
+            const raw = toPlayerId(p.solanaPublicKey || p.playerId || p.id)
+            const id = raw || toPlayerId(p.id)
             const uname = (p.username && String(p.username).trim()) || (id ? id.slice(0,8)+'...' : 'Player')
             return {
               id,
               username: uname,
-              walletShort: short,
+              walletShort: walletShort(id),
               wager: 0,
               wagerConfirmed: Boolean(p.isReady), // best-effort
               ready: Boolean(p.isReady),
@@ -434,4 +404,3 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
 
   return { state, confirmWager, setReady, adminEndMatch, reportMatchResult, selectColor }
 }
-

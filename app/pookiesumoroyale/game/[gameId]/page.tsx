@@ -1,10 +1,29 @@
 'use client';
 
 import React, { useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
-import RoyaleGameScene from '@/components/plug-penguin/minigames/pookie-sumo-royale/royale-game-scene';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useGuestIdentity } from '@/hooks/use-guest-identity';
+
+const RoyaleGameScene = dynamic(
+  () => import('@/components/plug-penguin/minigames/pookie-sumo-royale/royale-game-scene'),
+  {
+    ssr: false,
+    loading: () => (
+      <div style={{ width: '100vw', height: '100vh', background: '#020617', color: 'white', display: 'grid', placeItems: 'center' }}>
+        Loading arena...
+      </div>
+    ),
+  },
+);
+
+type CpuDifficulty = 'easy' | 'normal' | 'hard';
+
+function getCpuDifficulty(value: string | null): CpuDifficulty {
+  if (value === 'easy' || value === 'hard') return value;
+  return 'normal';
+}
 
 // This page renders the actual game scene for a given game ID.
 export default function GamePage() {
@@ -12,7 +31,7 @@ export default function GamePage() {
   const searchParams = useSearchParams(); // To potentially get isPractice if passed in query
   const router = useRouter();
   const { publicKey } = useWallet();
-  const guestId = useGuestIdentity();
+  useGuestIdentity();
 
   // Safely extract gameId - params can be string | string[] | undefined
   const rawGameId = params?.gameId;
@@ -21,23 +40,25 @@ export default function GamePage() {
   // Attempt to get isPractice from query params, if NewLobbyRoom passes it.
   // Otherwise, RoyaleGameScene might need a way to fetch/determine this if critical.
   const isPractice = searchParams?.get('practice') === 'true';
+  const isOfflinePractice = isPractice && (searchParams?.get('offline') === 'true' || gameId === 'offline-practice');
+  const cpuDifficulty = getCpuDifficulty(searchParams?.get('cpu'));
 
   // If the user hard-refreshes the live arena, send them back to the lobby browser.
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (isOfflinePractice) return;
     try {
       const navEntries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
-      const navType = navEntries[0]?.type || (performance as any).navigation?.type;
-      const isReload =
-        navType === 'reload' ||
-        navType === 1; // legacy PerformanceNavigation.TYPE_RELOAD
+      const navType = navEntries[0]?.type;
+      const legacyNavigation = (performance as Performance & { navigation?: { type?: number } }).navigation;
+      const isReload = navType === 'reload' || legacyNavigation?.type === 1;
       if (isReload) {
         router.replace('/pookiesumoroyale/lobby-browser');
       }
     } catch {
       // Best-effort; ignore if PerformanceNavigationTiming unsupported.
     }
-  }, [router]);
+  }, [isOfflinePractice, router]);
 
   if (!gameId || typeof gameId !== 'string') {
     return (
@@ -62,6 +83,11 @@ export default function GamePage() {
   // RoyaleGameScene will be responsible for connecting to the game server (if different from lobby server)
   // and handling game state.
   return (
-    <RoyaleGameScene lobbyId={gameId} isPractice={isPractice} />
+    <RoyaleGameScene
+      lobbyId={gameId}
+      isPractice={isPractice}
+      offline={isOfflinePractice}
+      cpuDifficulty={cpuDifficulty}
+    />
   );
 } 

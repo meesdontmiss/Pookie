@@ -6,6 +6,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 
 import { supabase } from "@/services/supabase-config";
 import { WagerPrompt } from "./WagerPrompt";
+import { useGuestIdentity } from "@/hooks/use-guest-identity";
 
 interface LobbyMeta {
   id: string;
@@ -37,13 +38,19 @@ function shortenWallet(address: string) {
   return `${address.slice(0, 4)}...${address.slice(-4)}`;
 }
 
+function samePlayerId(a: string | null | undefined, b: string | null | undefined) {
+  if (!a || !b) return false;
+  return a === b || a.toLowerCase() === b.toLowerCase();
+}
+
 export default function NewLobbyRoom({
   lobbyId,
   isPractice,
 }: NewLobbyRoomProps) {
   const router = useRouter();
   const { publicKey } = useWallet();
-  const walletAddress = publicKey?.toBase58() ?? null;
+  const guestId = useGuestIdentity();
+  const walletAddress = publicKey?.toBase58() ?? (isPractice ? guestId : null);
 
   const [lobby, setLobby] = useState<LobbyMeta | null>(null);
   const [players, setPlayers] = useState<LobbyPlayer[]>([]);
@@ -61,6 +68,7 @@ export default function NewLobbyRoom({
   const localPlayer = useMemo(
     () =>
       players.find((player) => player.walletAddress === walletAddress) ??
+      players.find((player) => samePlayerId(player.walletAddress, walletAddress)) ??
       null,
     [players, walletAddress],
   );
@@ -154,7 +162,9 @@ export default function NewLobbyRoom({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           walletAddress,
-          username: shortenWallet(walletAddress),
+          username: walletAddress.startsWith("guest_")
+            ? `Guest ${walletAddress.slice(-4)}`
+            : shortenWallet(walletAddress),
           wagerAmount: lobby?.wager ?? 0.25,
         }),
       });
@@ -327,7 +337,7 @@ export default function NewLobbyRoom({
                   <div>
                     <p className="font-semibold">
                       {player.username}
-                      {player.walletAddress === walletAddress && (
+                      {samePlayerId(player.walletAddress, walletAddress) && (
                         <span className="ml-2 text-xs text-blue-200">
                           (You)
                         </span>

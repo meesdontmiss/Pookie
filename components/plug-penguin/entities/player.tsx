@@ -6,6 +6,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, Html } from '@react-three/drei'
 import { useGameStore } from '@/lib/store'
 import { useKeyboardControls } from '../hooks/use-keyboard-controls'
+import { ASSET_PATHS } from '../utils/constants'
 
 interface PlayerProps {
   position?: [number, number, number]
@@ -68,8 +69,8 @@ export const Player = forwardRef<THREE.Group, PlayerProps>(({
   // Access the camera and scene
   const { camera } = useThree()
   
-  // Load the Pookie model
-  const { scene: pookieModel } = useGLTF('/models/POOKIE.glb')
+  // Load the lightweight runtime player model. The high-detail Pookie stays reserved for showcase views.
+  const { scene: pookieModel } = useGLTF(ASSET_PATHS.MODELS.GAME_PENGUIN)
   
   // Helper to check if element is a UI element that should prevent interaction
   const isUIElement = (target: HTMLElement): boolean => {
@@ -137,46 +138,8 @@ export const Player = forwardRef<THREE.Group, PlayerProps>(({
       model.traverse((child) => {
         if ((child as any).isMesh) {
           const meshChild = child as THREE.Mesh;
-          meshChild.castShadow = true;
-          meshChild.receiveShadow = true;
-          
-          // Log properties for potential eye meshes
-          const nameLower = meshChild.name.toLowerCase();
-          if (nameLower.includes('eye') || nameLower.includes('pupil') || nameLower.includes('cornea') || nameLower.includes('iris') || nameLower.includes('sclera')) {
-            console.log(`Eye Mesh Found: ${meshChild.name}`, meshChild);
-            if (meshChild.material) {
-              if (Array.isArray(meshChild.material)) {
-                meshChild.material.forEach((mat, index) => {
-                  console.log(`Eye Material (${meshChild.name}, index ${index}):`, {
-                    name: mat.name,
-                    transparent: mat.transparent,
-                    alphaTest: mat.alphaTest,
-                    depthWrite: mat.depthWrite,
-                    depthTest: mat.depthTest,
-                    side: mat.side,
-                    visible: mat.visible,
-                    opacity: mat.opacity,
-                    blending: mat.blending,
-                    // Add any other properties you suspect
-                  });
-                });
-              } else {
-                const mat = meshChild.material as THREE.MeshStandardMaterial; // Or appropriate type
-                console.log(`Eye Material (${meshChild.name}):`, {
-                  name: mat.name,
-                  transparent: mat.transparent,
-                  alphaTest: mat.alphaTest,
-                  depthWrite: mat.depthWrite,
-                  depthTest: mat.depthTest,
-                  side: mat.side,
-                  visible: mat.visible,
-                  opacity: mat.opacity,
-                  blending: mat.blending,
-                  // Add any other properties you suspect
-                });
-              }
-            }
-          }
+          meshChild.castShadow = false;
+          meshChild.receiveShadow = false;
 
           if (meshChild.material) {
             if (Array.isArray(meshChild.material)) {

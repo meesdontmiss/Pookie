@@ -6,10 +6,11 @@ import { Environment, useGLTF, useTexture, Torus } from '@react-three/drei'
 import { Physics, RigidBody, CylinderCollider, BallCollider, TrimeshCollider } from '@react-three/rapier'
 import { PookieInBallEffect } from '@/components/plug-penguin/minigames/superpookieball/pookie-in-ball-effect'
 import PushEffect from '@/components/plug-penguin/effects/PushEffect'
+import { ASSET_PATHS } from '@/components/plug-penguin/utils/constants'
 import * as THREE from 'three'
 
 // Preload models
-useGLTF.preload('/models/POOKIE.glb')
+useGLTF.preload(ASSET_PATHS.MODELS.GAME_PENGUIN)
 useGLTF.preload('/models/pookie_blimp.glb')
 
 const platformRadius = 20
@@ -181,8 +182,7 @@ function RollingPlayer({ color, spawnAngle }: { color: string; spawnAngle: numbe
   const lastChangeRef = useRef(0)
   const lastPushRef = useRef(0)
   const [fxId, setFxId] = useState<string | null>(null)
-  const idRef = useRef<string>(() => Math.random().toString(36).slice(2)) as React.MutableRefObject<any>
-  if (typeof idRef.current === 'function') idRef.current = idRef.current()
+  const idRef = useRef<string>(Math.random().toString(36).slice(2))
 
   // Initial spawn around a ring
   const spawnRadius = platformRadius * 0.55
@@ -351,25 +351,26 @@ function FallingSnowParticles() {
 
 function CinematicLayer({ shot, seed = 0 }: { shot: Shot; seed?: number }) {
   const { camera } = useThree()
+  const perspectiveCamera = camera as THREE.PerspectiveCamera
   const t0 = useRef(0)
 
   useEffect(() => {
-    camera.position.copy(shot.position)
-    camera.fov = shot.fov
-    camera.updateProjectionMatrix()
-    camera.lookAt(shot.target)
+    perspectiveCamera.position.copy(shot.position)
+    perspectiveCamera.fov = shot.fov
+    perspectiveCamera.updateProjectionMatrix()
+    perspectiveCamera.lookAt(shot.target)
     t0.current = performance.now()
-  }, [camera, shot])
+  }, [perspectiveCamera, shot])
 
   // Subtle handheld drift per layer to add life (very small)
   useFrame(() => {
     const t = (performance.now() - t0.current) / 1000
     const amp = shot.driftAmp ?? 0.15
     const freq = shot.driftFreq ?? 0.2
-    camera.position.x = shot.position.x + Math.sin(t * freq + seed) * amp
-    camera.position.y = shot.position.y + Math.sin(t * (freq * 0.85) + seed * 2) * amp
-    camera.position.z = shot.position.z + Math.cos(t * (freq * 1.1) + seed * 3) * amp
-    camera.lookAt(shot.target)
+    perspectiveCamera.position.x = shot.position.x + Math.sin(t * freq + seed) * amp
+    perspectiveCamera.position.y = shot.position.y + Math.sin(t * (freq * 0.85) + seed * 2) * amp
+    perspectiveCamera.position.z = shot.position.z + Math.cos(t * (freq * 1.1) + seed * 3) * amp
+    perspectiveCamera.lookAt(shot.target)
   })
 
   return null
@@ -380,6 +381,7 @@ export default function CinematicSumoBg({ singleLayer = false }: { singleLayer?:
     // Single-canvas variant (better for recording/capture)
     function CinematicCameraSingle() {
       const { camera } = useThree()
+      const perspectiveCamera = camera as THREE.PerspectiveCamera
       const startTime = useRef(performance.now())
       const idxRef = useRef(0)
       const startPos = useRef(new THREE.Vector3())
@@ -394,19 +396,19 @@ export default function CinematicSumoBg({ singleLayer = false }: { singleLayer?:
         const b = SHOTS[1]
         startPos.current.copy(a.position); startTar.current.copy(a.target); startFov.current = a.fov
         endPos.current.copy(b.position); endTar.current.copy(b.target); endFov.current = b.fov
-        camera.position.copy(a.position); camera.fov = a.fov; camera.updateProjectionMatrix(); camera.lookAt(a.target)
+        perspectiveCamera.position.copy(a.position); perspectiveCamera.fov = a.fov; perspectiveCamera.updateProjectionMatrix(); perspectiveCamera.lookAt(a.target)
         startTime.current = performance.now()
         durRef.current = a.duration
-      }, [camera])
+      }, [perspectiveCamera])
       useFrame(() => {
         const now = performance.now()
         const t = Math.min(1, (now - startTime.current) / durRef.current)
         const eased = 0.5 - Math.cos(t * Math.PI) / 2
-        camera.position.lerpVectors(startPos.current, endPos.current, eased)
+        perspectiveCamera.position.lerpVectors(startPos.current, endPos.current, eased)
         const curTar = new THREE.Vector3().lerpVectors(startTar.current, endTar.current, eased)
-        camera.fov = startFov.current + (endFov.current - startFov.current) * eased
-        camera.updateProjectionMatrix()
-        camera.lookAt(curTar)
+        perspectiveCamera.fov = startFov.current + (endFov.current - startFov.current) * eased
+        perspectiveCamera.updateProjectionMatrix()
+        perspectiveCamera.lookAt(curTar)
         if (t >= 1) {
           idxRef.current = (idxRef.current + 1) % SHOTS.length
           const a = SHOTS[idxRef.current]
@@ -510,4 +512,3 @@ export default function CinematicSumoBg({ singleLayer = false }: { singleLayer?:
     </div>
   )
 }
-

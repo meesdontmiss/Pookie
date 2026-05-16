@@ -1,13 +1,14 @@
 'use client'
 
 import { useEffect } from 'react'
+import { ASSET_PATHS } from '@/components/plug-penguin/utils/constants'
 
 export default function PreloadPookieOnIdle() {
   useEffect(() => {
     const preload = async () => {
       try {
         const mod = await import('@react-three/drei')
-        mod.useGLTF.preload('/models/POOKIE.glb')
+        mod.useGLTF.preload(ASSET_PATHS.MODELS.GAME_PENGUIN)
       } catch {}
     }
     if (typeof window !== 'undefined') {

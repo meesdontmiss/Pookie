@@ -45,6 +45,7 @@ export const UI_CONSTANTS = {
 export const ASSET_PATHS = {
   MODELS: {
     PENGUIN: '/models/POOKIE.glb',
+    GAME_PENGUIN: '/models/quest characters/penguin.glb',
     SNOWMAN: '', // Will create with primitive shapes
     IGLOO: '',   // Will create with primitive shapes
     TREE: ''     // Will create with primitive shapes

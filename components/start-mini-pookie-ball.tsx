@@ -4,9 +4,10 @@ import React, { Suspense } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import { MiniPookieBallOptimized } from '@/components/mini-pookie-ball-optimized'
+import { ASSET_PATHS } from '@/components/plug-penguin/utils/constants'
 
 // Preload the model as early as possible
-useGLTF.preload('/models/POOKIE.glb')
+useGLTF.preload(ASSET_PATHS.MODELS.GAME_PENGUIN)
 
 export default function StartMiniPookieBall() {
   return (
@@ -48,5 +49,4 @@ export default function StartMiniPookieBall() {
     </div>
   )
 }
-
 

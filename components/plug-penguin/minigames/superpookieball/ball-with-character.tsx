@@ -1,9 +1,10 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useMemo, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { RigidBody, BallCollider, CollisionEnterPayload } from '@react-three/rapier';
 import { useGLTF, MeshTransmissionMaterial, useKeyboardControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { Controls } from './keyboard-controls';
+import { ASSET_PATHS } from '../../utils/constants';
 
 interface BallWithCharacterProps {
   position: [number, number, number];
@@ -31,11 +32,11 @@ export const BallWithCharacter: React.FC<BallWithCharacterProps> = ({
   const [collisionCount, setCollisionCount] = useState(0);
   const [isCollecting, setIsCollecting] = useState(false);
   
-  // Load Pookie character model - fixed path to use POOKIE.glb (uppercase)
-  const { scene: pookieModel } = useGLTF('/models/POOKIE.glb');
+  // Use the lightweight runtime penguin; the high-detail Pookie is reserved for showcase views.
+  const { scene: pookieModel } = useGLTF(ASSET_PATHS.MODELS.GAME_PENGUIN);
   
   // Clone the model to avoid issues
-  const clonedPookie = pookieModel.clone();
+  const clonedPookie = useMemo(() => pookieModel.clone(), [pookieModel]);
   
   // Prepare model
   useEffect(() => {
@@ -56,8 +57,8 @@ export const BallWithCharacter: React.FC<BallWithCharacterProps> = ({
       // Make sure all parts cast shadows
       clonedPookie.traverse((child) => {
         if (child instanceof THREE.Mesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
+          child.castShadow = false;
+          child.receiveShadow = false;
           
           // Make sure materials use physically correct lighting
           if (child.material) {
@@ -197,10 +198,10 @@ export const BallWithCharacter: React.FC<BallWithCharacterProps> = ({
       
       {/* Transparent ball */}
       <mesh castShadow receiveShadow>
-        <sphereGeometry args={[radius, 32, 32]} />
+        <sphereGeometry args={[radius, 24, 24]} />
         <MeshTransmissionMaterial
-          samples={16}
-          resolution={256}
+          samples={6}
+          resolution={128}
           thickness={0.2}
           roughness={0}
           transmission={1}

@@ -182,7 +182,7 @@ const MobileControls: React.FC<MobileControlsProps> = ({ onMove, onJump, onPush,
             cursor: 'pointer',
             boxShadow: pushCooldown ? 'none' : '0 0 16px rgba(255,68,102,0.4)',
             opacity: pushCooldown ? 0.5 : 1,
-            letterSpacing: 1,
+            letterSpacing: 0,
           }}
         >
           PUSH
@@ -203,7 +203,7 @@ const MobileControls: React.FC<MobileControlsProps> = ({ onMove, onJump, onPush,
             touchAction: 'none',
             cursor: 'pointer',
             boxShadow: '0 0 16px rgba(0,170,255,0.4)',
-            letterSpacing: 1,
+            letterSpacing: 0,
           }}
         >
           JUMP

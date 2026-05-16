@@ -1,19 +1,19 @@
 'use client';
 
-import React, { Suspense, useMemo, useRef, useState, useEffect, useCallback, ForwardedRef } from 'react';
+import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Environment, useTexture, Torus, Sphere, Box, Cylinder, Plane, Points, Point, Text, Capsule, useGLTF, KeyboardControls, Html } from '@react-three/drei';
+import { Environment, Points, Point, Text, Torus, Sphere, useGLTF, useTexture, KeyboardControls, Html } from '@react-three/drei';
 import * as THREE from 'three'; // Import THREE for texture repeat
-import { Howl } from 'howler'; // ADDED Howler import
 import { FallingSnow } from '../../effects/falling-snow'; // Import FallingSnow
 import { Physics, RigidBody, BallCollider, CylinderCollider, TrimeshCollider, CuboidCollider, useRapier } from '@react-three/rapier'; // Added Rapier imports & useRapier
 import { useKeyboardControls } from '@react-three/drei'; // For keyboard controls
-import io, { Socket } from 'socket.io-client'; // Added socket.io-client
+import type { Socket } from 'socket.io-client';
 import PushEffect from '../../effects/PushEffect'; // Import the new effect
 import MobileControls from './MobileControls';
+import { ASSET_PATHS } from '../../utils/constants';
 
 // Preload the Pookie model
-useGLTF.preload('/models/POOKIE.glb');
+useGLTF.preload(ASSET_PATHS.MODELS.GAME_PENGUIN);
 useGLTF.preload('/models/pookie_blimp.glb'); // Preload the Pookie Blimp model
 
 // Keyboard control mapping - changed to enum
@@ -29,6 +29,7 @@ export enum Controls {
 // At the top of the file, ensure GameState is defined ONCE.
 // If it's also defined around line 1024, that one needs to be removed.
 export type GameState = 'WAITING' | 'STARTING_COUNTDOWN' | 'ACTIVE' | 'ROUND_OVER' | 'GAME_OVER';
+export type CpuDifficulty = 'easy' | 'normal' | 'hard';
 
 export interface SumoArenaSceneProps {
   gameState: GameState; // This is the gameState passed from RoyaleGameScene
@@ -37,6 +38,8 @@ export interface SumoArenaSceneProps {
   localUsername: string | null;
   lobbyId: string;
   isPractice: boolean; // Added isPractice prop
+  offline?: boolean;
+  cpuDifficulty?: CpuDifficulty;
   playerWalletAddress: string; // Added to receive the wallet address of the local player
 }
 
@@ -93,23 +96,33 @@ const JUMP_FORCE = 7; // Define jump force
 const PUSH_IMPULSE_STRENGTH = 20; // Strength of the push
 const PUSH_COOLDOWN_DURATION = 1500; // 1.5 seconds in milliseconds
 
-// --- START: Constants for Client-Side Game Simulation ---
-const TOTAL_PLAYERS = 8; // 1 local + 7 AI
-const SIMULATED_WAITING_DURATION = 3000; // 3 seconds
-const SIMULATED_COUNTDOWN_DURATION = 3; // 3 seconds
-const AI_ELIMINATION_BASE_DURATION = 10000; // 10 seconds base for AI to be "eliminated"
-const AI_ELIMINATION_RANDOM_FACTOR = 5000; // Plus up to 5 random seconds
-// --- END: Constants for Client-Side Game Simulation ---
+const CPU_DIFFICULTY_CONFIG: Record<CpuDifficulty, { count: number; speed: number; orbit: number; aggression: number }> = {
+  easy: { count: 1, speed: 2.0, orbit: 5.2, aggression: 0.55 },
+  normal: { count: 2, speed: 2.8, orbit: 4.4, aggression: 0.75 },
+  hard: { count: 3, speed: 3.5, orbit: 3.7, aggression: 0.95 },
+};
 
-interface AIPlayerState {
-  id: string;
-  username: string;
-  ballColor: string;
-  initialPosition: [number, number, number];
-  initialYawAngle: number;
-  isEliminated: boolean; // For client-side tracking of AI status
-  eliminationTimerId?: NodeJS.Timeout; // To clear elimination timer if needed
-  ref?: React.RefObject<any>; // Made ref optional
+const CPU_COLORS = ['#63e6be', '#ffd166', '#7dd3fc'];
+
+function playSound(src: string, volume: number) {
+  void import('howler')
+    .then(({ Howl }) => {
+      const sound = new Howl({ src: [src], volume });
+      sound.play();
+    })
+    .catch(() => {});
+}
+
+async function unlockAudioContext() {
+  try {
+    const { Howler } = await import('howler');
+    const ctx = (Howler as unknown as { ctx?: AudioContext }).ctx;
+    if (ctx?.state === 'suspended') {
+      await ctx.resume();
+    }
+  } catch {
+    // Audio unlock is best-effort; the next user gesture can still resume it.
+  }
 }
 
 // Player Component - Now uses React.forwardRef and React.memo
@@ -117,7 +130,7 @@ const Player = React.memo(React.forwardRef<any, PlayerProps>((
   { ballColor, socket, isSpectatingOrEliminated, onFallenOff, username, initialPosition, initialYawAngle, onPushAction, platformHeightActual, mobileInputRef }, 
   ref // This ref will be attached to the RigidBody
 ) => {
-  const { scene: pookieScene } = useGLTF('/models/POOKIE.glb');
+  const { scene: pookieScene } = useGLTF(ASSET_PATHS.MODELS.GAME_PENGUIN);
   const { camera } = useThree(); // Get camera for initial setup
   const initialCameraSetupDone = useRef(false); // Ensure one-time setup
   // Reverted to original simpler useState initialization
@@ -164,19 +177,14 @@ const Player = React.memo(React.forwardRef<any, PlayerProps>((
       const arenaCenterTarget = new THREE.Vector3(0, platformHeightActual / 2 + 0.5, 0);
       const directionToCenter = new THREE.Vector3().subVectors(arenaCenterTarget, playerWorldPos).normalize();
 
-      const cameraDistanceBehindPlayer = 7.0; 
-      const cameraHeightAbovePlayerOrigin = 2.5;
+      const cameraDistanceBehindPlayer = 8.5;
+      const cameraHeightAbovePlayerOrigin = 4.0;
 
       // 1. Get the vector pointing directly "behind" the player (away from arena center)
       const vectorPointingBehindPlayer = directionToCenter.clone().negate(); // Normalized
 
-      // 2. Rotate this vector 90 degrees clockwise around the world Y-axis
-      //    A clockwise rotation around Y by 90 degrees is -PI/2 radians.
-      const rotationEuler = new THREE.Euler(0, -Math.PI / 2, 0);
-      const rotatedOffsetDirection = vectorPointingBehindPlayer.clone().applyEuler(rotationEuler);
-
-      // 3. Scale this rotated direction to get the final offset
-      const finalCameraOffset = rotatedOffsetDirection.setLength(cameraDistanceBehindPlayer);
+      // 2. Scale this direction to start behind the player, away from center.
+      const finalCameraOffset = vectorPointingBehindPlayer.setLength(cameraDistanceBehindPlayer);
 
       // 4. Calculate camera position
       const cameraPosition = playerWorldPos.clone().add(finalCameraOffset);
@@ -192,7 +200,7 @@ const Player = React.memo(React.forwardRef<any, PlayerProps>((
       // Conditional logging for development
       if (process.env.NODE_ENV === 'development') {
       console.log('[Player LOCAL] Initial camera POS:', camera.position.toArray(), 'LOOKING AT:', arenaCenterTarget.toArray());
-      console.log('[Player LOCAL] Player Pos:', playerWorldPos.toArray(), 'DirectionToCenter:', directionToCenter.toArray(), 'RotatedOffsetDirection:', rotatedOffsetDirection.toArray());
+      console.log('[Player LOCAL] Player Pos:', playerWorldPos.toArray(), 'DirectionToCenter:', directionToCenter.toArray(), 'CameraOffsetDirection:', finalCameraOffset.toArray());
       }
     }
   }, [isLocalPlayerInstance, initialPosition, initialYawAngle, camera, smoothedCameraPosition, smoothedCameraTarget, platformHeightActual]);
@@ -201,26 +209,12 @@ const Player = React.memo(React.forwardRef<any, PlayerProps>((
     const isLocalPlayerInstance = !!onPushAction;
     const rigidBody = (ref && typeof ref !== 'function') ? ref.current : null;
 
-    if (!onPushAction && !rigidBody) { // AI player and its own rigidBody ref is null
-      // Conditional logging for development
-      if (process.env.NODE_ENV === 'development') {
-        console.error(`[Player AI ID: ${initialPosition ? initialPosition.join(',') : 'N/A'}] CRITICAL: AI's own rigidBody ref is NULL in its useFrame.`);
-      }
-    }
-
     if (!rigidBody) {
-      // Conditional logging for development
-      if (isLocalPlayerInstance && process.env.NODE_ENV === 'development') console.log(`[Player LOCAL] useFrame: rigidBody is NULL.`);
-        return;
-    }
-
-    // Conditional logging for development
-    if (isLocalPlayerInstance && process.env.NODE_ENV === 'development') {
-      console.log(`[Player ${isLocalPlayerInstance ? 'LOCAL' : 'AI/Remote'}] useFrame TICK. isSpectatingOrEliminated: ${isSpectatingOrEliminated}`);
+      return;
     }
     
-    // Ground Check (only for local player with socket that can jump)
-    if (socket) {
+    // Ground Check (only for the local controllable player)
+    if (isLocalPlayerInstance) {
       const playerPosition = rigidBody.translation();
       const rayOrigin = { x: playerPosition.x, y: playerPosition.y - playerRadius - 0.1, z: playerPosition.z };
       const rayDirection = { x: 0, y: -1, z: 0 };
@@ -239,7 +233,7 @@ const Player = React.memo(React.forwardRef<any, PlayerProps>((
     }
 
     // Player controls/movement and state updates
-    if (socket && !isSpectatingOrEliminated && !hasFallenOff.current) {
+    if (isLocalPlayerInstance && !isSpectatingOrEliminated && !hasFallenOff.current) {
         const kbKeys = getKeys();
         // Merge mobile inputs with keyboard inputs
         const mobile = mobileInputRef?.current;
@@ -344,7 +338,7 @@ const Player = React.memo(React.forwardRef<any, PlayerProps>((
         
         // Emit player state at a controlled interval
         const now = performance.now();
-        if (now - lastEmitTimeRef.current > emitInterval) {
+        if (socket && now - lastEmitTimeRef.current > emitInterval) {
         const currentPos = rigidBody.translation(); 
         const currentRot = rigidBody.rotation(); 
       socket.emit('playerStateUpdate', {
@@ -361,17 +355,21 @@ const Player = React.memo(React.forwardRef<any, PlayerProps>((
       
       const playerPosition = rigidBody.translation(); 
       
-      // Third-person camera: behind and above the player
-      const playerRotation = rigidBody.rotation();
-      const desiredOffset = new THREE.Vector3(0, 3.5, 8); // Behind (Z), above (Y)
-      const threePlayerRotation = new THREE.Quaternion(playerRotation.x, playerRotation.y, playerRotation.z, playerRotation.w);
-      const cameraOffset = desiredOffset.clone().applyQuaternion(threePlayerRotation);
+      // Third-person camera: slightly behind the player relative to arena center.
+      const arenaCenter = new THREE.Vector3(0, platformHeightActual / 2, 0);
+      const playerVec = new THREE.Vector3(playerPosition.x, playerPosition.y, playerPosition.z);
+      const awayFromCenter = playerVec.clone().sub(arenaCenter);
+      awayFromCenter.y = 0;
+      if (awayFromCenter.lengthSq() < 0.01) awayFromCenter.set(0, 0, 1);
+      awayFromCenter.normalize();
+      const cameraOffset = awayFromCenter.multiplyScalar(8.5);
+      cameraOffset.y = 4.2;
       const idealCameraPosition = new THREE.Vector3(
         playerPosition.x + cameraOffset.x,
         playerPosition.y + cameraOffset.y,
         playerPosition.z + cameraOffset.z
       );
-      const idealLookAt = new THREE.Vector3(playerPosition.x, playerPosition.y + 0.5, playerPosition.z);
+      const idealLookAt = new THREE.Vector3(playerPosition.x, playerPosition.y + 0.65, playerPosition.z);
 
       // Smooth camera movement
       smoothedCameraPosition.lerp(idealCameraPosition, 8 * delta);
@@ -402,18 +400,13 @@ const Player = React.memo(React.forwardRef<any, PlayerProps>((
     // Removed: clone.rotation.y += Math.PI / 2; 
     clone.traverse((child) => {
       if (child instanceof THREE.Mesh) {
-        child.castShadow = true;
+        child.castShadow = false;
       }
     });
     return clone;
   }, [pookieScene]);
 
   const emissiveColor = useMemo(() => new THREE.Color(ballColor).multiplyScalar(0.5), [ballColor]);
-
-  if (!onPushAction && process.env.NODE_ENV === 'development') { // This is an AI player instance, log only in dev
-    const calculatedType = (isSpectatingOrEliminated && hasFallenOff.current) ? "fixed" : "dynamic";
-    console.log(`[Player AI ID: ${initialPosition ? initialPosition.join(',') : 'DEBUG_NO_INITIAL_POS'}] PROPS: isSpectatingOrEliminated=${isSpectatingOrEliminated}, hasFallenOff=${hasFallenOff.current}. RB Type CALC: ${calculatedType}`);
-  }
 
   return (
     <RigidBody
@@ -427,7 +420,7 @@ const Player = React.memo(React.forwardRef<any, PlayerProps>((
       linearDamping={0.2}
       angularDamping={0.3}
       canSleep={false}
-      name={socket ? "player-sumo-ball-local" : "player-sumo-ball-ai"}
+      name="player-sumo-ball-local"
       type={isSpectatingOrEliminated && hasFallenOff.current ? "fixed" : "dynamic"}
     >
       <BallCollider args={[playerRadius]} />
@@ -489,7 +482,7 @@ const OtherPlayer: React.FC<OtherPlayerProps> = React.memo(({
   visible,
 }) => {
   const rigidBodyRef = useRef<any>();
-  const { scene: pookieScene } = useGLTF('/models/POOKIE.glb');
+  const { scene: pookieScene } = useGLTF(ASSET_PATHS.MODELS.GAME_PENGUIN);
 
   const playerRadius = 0.7;
   const pookieModelScale = 0.25;
@@ -500,7 +493,7 @@ const OtherPlayer: React.FC<OtherPlayerProps> = React.memo(({
     // Removed: clone.rotation.y += Math.PI / 2;
     clone.traverse((child) => {
       if (child instanceof THREE.Mesh) {
-        child.castShadow = true;
+        child.castShadow = false;
       }
     });
     return clone;
@@ -608,6 +601,150 @@ const OtherPlayer: React.FC<OtherPlayerProps> = React.memo(({
 });
 OtherPlayer.displayName = "OtherPlayer"; // Add displayName for consistency
 
+interface PracticeCpuPlayerProps {
+  id: string;
+  username: string;
+  ballColor: string;
+  initialPosition: [number, number, number];
+  difficulty: CpuDifficulty;
+  localPlayerRef: React.RefObject<any>;
+  active: boolean;
+}
+
+const PracticeCpuPlayer: React.FC<PracticeCpuPlayerProps> = React.memo(({
+  id,
+  username,
+  ballColor,
+  initialPosition,
+  difficulty,
+  localPlayerRef,
+  active,
+}) => {
+  const rigidBodyRef = useRef<any>();
+  const { scene: pookieScene } = useGLTF(ASSET_PATHS.MODELS.GAME_PENGUIN);
+  const playerRadius = 0.7;
+  const pookieModelScale = 0.25;
+  const pookieModelPositionOffset = new THREE.Vector3(0, -playerRadius * 0.65, 0);
+  const config = CPU_DIFFICULTY_CONFIG[difficulty];
+  const phase = useMemo(() => Math.random() * Math.PI * 2, []);
+
+  const clonedPookieScene = useMemo(() => {
+    const clone = pookieScene.clone();
+    clone.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = false;
+      }
+    });
+    return clone;
+  }, [pookieScene]);
+
+  const emissiveColor = useMemo(() => new THREE.Color(ballColor).multiplyScalar(0.5), [ballColor]);
+
+  useEffect(() => {
+    if (!rigidBodyRef.current) return;
+    rigidBodyRef.current.setTranslation({ x: initialPosition[0], y: initialPosition[1], z: initialPosition[2] }, true);
+  }, [initialPosition]);
+
+  useFrame(({ clock }, delta) => {
+    const body = rigidBodyRef.current;
+    if (!body) return;
+    if (!active) return;
+
+    const current = body.translation();
+    const currentVec = new THREE.Vector3(current.x, current.y, current.z);
+    const targetBody = localPlayerRef.current;
+    let desired = new THREE.Vector3(
+      Math.sin(clock.elapsedTime * 0.55 + phase) * 8,
+      platformHeight / 2 + 1.2,
+      Math.cos(clock.elapsedTime * 0.55 + phase) * 8,
+    );
+
+    if (targetBody) {
+      const local = targetBody.translation();
+      const localVec = new THREE.Vector3(local.x, local.y, local.z);
+      const orbitAngle = clock.elapsedTime * (0.8 + config.aggression * 0.5) + phase;
+      const orbitOffset = new THREE.Vector3(Math.sin(orbitAngle), 0, Math.cos(orbitAngle)).multiplyScalar(config.orbit);
+      desired = localVec.clone().lerp(localVec.clone().add(orbitOffset), 1 - config.aggression * 0.35);
+      desired.y = platformHeight / 2 + 1.2;
+    }
+
+    const centerDistance = Math.hypot(desired.x, desired.z);
+    if (centerDistance > platformRadius * 0.78) {
+      desired.multiplyScalar((platformRadius * 0.78) / centerDistance);
+      desired.y = platformHeight / 2 + 1.2;
+    }
+
+    const direction = desired.sub(currentVec);
+    if (direction.lengthSq() > 0.001) {
+      direction.normalize();
+      const next = currentVec.add(direction.multiplyScalar(config.speed * delta));
+      body.setNextKinematicTranslation(next);
+      const yaw = Math.atan2(direction.x, direction.z);
+      body.setNextKinematicRotation(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)));
+    }
+  });
+
+  return (
+    <RigidBody
+      ref={rigidBodyRef}
+      colliders={false}
+      position={initialPosition}
+      mass={1.5}
+      restitution={0.5}
+      friction={0.7}
+      canSleep={false}
+      name={`practice-cpu-${id}`}
+      type="kinematicPosition"
+    >
+      <BallCollider args={[playerRadius]} />
+      <mesh castShadow={false} receiveShadow={false} rotation={[0, 0, Math.PI / 2]}>
+        <sphereGeometry args={[playerRadius, 12, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshStandardMaterial
+          color="#e0f0ff"
+          roughness={0.15}
+          metalness={0.05}
+          transparent
+          opacity={0.25}
+          envMapIntensity={0.7}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      <mesh castShadow={false} receiveShadow={false} rotation={[0, 0, -Math.PI / 2]}>
+        <sphereGeometry args={[playerRadius, 12, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshStandardMaterial
+          color={ballColor}
+          roughness={0.2}
+          metalness={0.3}
+          transparent
+          opacity={0.75}
+          emissive={emissiveColor}
+          emissiveIntensity={0.4}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      <primitive
+        object={clonedPookieScene}
+        scale={pookieModelScale}
+        position={pookieModelPositionOffset}
+        rotation={[0, Math.PI / 2, 0]}
+      />
+      <Text
+        position={[0, playerRadius + 0.8, 0]}
+        fontSize={0.32}
+        color="white"
+        anchorX="center"
+        anchorY="middle"
+        outlineWidth={0.02}
+        outlineColor="black"
+        font="/fonts/Heavitas.ttf"
+      >
+        {username}
+      </Text>
+    </RigidBody>
+  );
+});
+PracticeCpuPlayer.displayName = "PracticeCpuPlayer";
+
 // Game HUD Component - Updated for spectator controls
 interface GameHUDProps {
   players: LivePlayer[];
@@ -616,6 +753,7 @@ interface GameHUDProps {
   spectatedPlayerId?: string | null; // To highlight the currently spectated player
   onSpectatePrevious?: () => void; // Callback for previous button
   onSpectateNext?: () => void; // Callback for next button
+  compactDuringPlay?: boolean;
 }
 
 const GameHUD: React.FC<GameHUDProps> = ({ 
@@ -624,10 +762,27 @@ const GameHUD: React.FC<GameHUDProps> = ({
     isSpectating, 
     spectatedPlayerId, 
     onSpectatePrevious, 
-    onSpectateNext 
+    onSpectateNext,
+    compactDuringPlay,
 }) => {
+    const [expanded, setExpanded] = useState(false);
+    const [isCompactViewport, setIsCompactViewport] = useState(false);
     const activePlayersCount = players.filter(p => p.status === 'In').length;
     const canCycleSpectatorButtons = isSpectating && activePlayersCount > 1 && onSpectatePrevious && onSpectateNext;
+    const compact = !!compactDuringPlay && isCompactViewport && !isSpectating;
+
+    useEffect(() => {
+        const update = () => setIsCompactViewport(window.innerWidth < 768);
+        update();
+        window.addEventListener('resize', update);
+        return () => window.removeEventListener('resize', update);
+    }, []);
+
+    useEffect(() => {
+        if (!compactDuringPlay || isSpectating) {
+          setExpanded(false);
+        }
+    }, [compactDuringPlay, isSpectating]);
 
     const buttonStyle: React.CSSProperties = {
         padding: '5px 10px',
@@ -641,33 +796,82 @@ const GameHUD: React.FC<GameHUDProps> = ({
         boxShadow: '0px 2px 5px rgba(0,0,0,0.2)',
     };
 
+  if (compact && !expanded) {
+    return (
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        style={{
+          position: 'fixed',
+          top: '12px',
+          left: '12px',
+          backgroundColor: 'rgba(2,6,23,0.78)',
+          border: '1px solid rgba(148, 163, 184, 0.3)',
+          borderRadius: '999px',
+          color: 'white',
+          fontFamily: 'Heavitas,Arial,sans-serif',
+          fontSize: '0.72rem',
+          padding: '8px 11px',
+          zIndex: 100,
+          pointerEvents: 'auto',
+          boxShadow: '0px 8px 24px rgba(0,0,0,0.35)',
+        }}
+      >
+        Alive: {activePlayersCount}
+      </button>
+    );
+  }
+
   return (
     <div style={{
-            position: 'fixed', top: '70px', left: '15px', 
-            backgroundColor: 'rgba(0,0,0,0.65)', padding: '10px', borderRadius: '10px', 
-            color: 'white', fontFamily: 'Heavitas,Arial,sans-serif', minWidth: '220px', 
-            zIndex: 100, pointerEvents: isSpectating ? 'auto' : 'none', 
-            boxShadow: '0px 2px 10px rgba(0,0,0,0.5)'
+            position: 'fixed', top: '12px', left: '12px', 
+            backgroundColor: 'rgba(2,6,23,0.72)', padding: '8px 10px', borderRadius: '8px', 
+            color: 'white', fontFamily: 'Heavitas,Arial,sans-serif', width: 'min(180px, calc(100vw - 24px))', 
+            maxHeight: '34vh', overflow: 'auto',
+            zIndex: 100, pointerEvents: isSpectating || compact ? 'auto' : 'none', 
+            boxShadow: '0px 8px 24px rgba(0,0,0,0.35)',
+            border: '1px solid rgba(148, 163, 184, 0.25)',
         }}>
-            <h3 style={{ margin: '0 0 12px 0', borderBottom: '1px solid rgba(255,255,255,0.5)', paddingBottom: '8px', fontSize: '1em' }}>
-                Players Alive
+            <h3 style={{ margin: '0 0 8px 0', borderBottom: '1px solid rgba(255,255,255,0.22)', paddingBottom: '7px', fontSize: '0.72em' }}>
+                Alive: {activePlayersCount}
+                {compact && (
+                  <button
+                    type="button"
+                    onClick={() => setExpanded(false)}
+                    style={{
+                      float: 'right',
+                      border: '0',
+                      background: 'transparent',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontWeight: 800,
+                    }}
+                  >
+                    x
+                  </button>
+                )}
             </h3>
-            <ul style={{ listStyle: 'none', margin: 0, padding: '0 0 10px 0' }}>
+            <ul style={{ listStyle: 'none', margin: 0, padding: canCycleSpectatorButtons ? '0 0 10px 0' : 0 }}>
                 {players.length > 0 ? players.map(p => (
                     <li key={p.id} 
                         style={{
                             textDecoration: p.status === 'Out' ? 'line-through' : 'none',
                             opacity: p.status === 'Out' ? 0.6 : 1,
-                            padding: '5px 0',
-                            fontSize: '0.9em',
+                            padding: '3px 0',
+                            fontSize: 0,
                             cursor: isSpectating && p.status === 'In' && onPlayerNameClick ? 'pointer' : 'default',
                             color: isSpectating && p.id === spectatedPlayerId ? '#FFD700' : 'white', // Highlight if spectated
                             fontWeight: isSpectating && p.id === spectatedPlayerId ? 'bold' : (p.status === 'In' ? 'normal' : 'normal'),
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            gap: 8,
                         }} 
                         onClick={() => isSpectating && p.status === 'In' && onPlayerNameClick?.(p.id)}
                     >
-                        {isSpectating && p.id === spectatedPlayerId ? `► ${p.username}` : p.username} - 
-                        <span style={{ fontWeight: p.status === 'In' ? 'bold' : 'normal' }}>{p.status}</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.68rem' }}>
+                          {isSpectating && p.id === spectatedPlayerId ? `> ${p.username}` : p.username}
+                        </span>
+                        <span style={{ fontWeight: p.status === 'In' ? 'bold' : 'normal', fontSize: '0.68rem' }}>{p.status}</span>
           </li>
         )) : <li style={{ fontStyle: 'italic', opacity: 0.7 }}>Waiting for players...</li>}
       </ul>
@@ -1053,13 +1257,15 @@ const GameStatusUI: React.FC<GameStatusUIProps> = ({ gameState, winnerInfo, coun
       backgroundColor: 'rgba(0,0,0,0.75)',
       color: 'white',
       padding: '24px 48px',
-      borderRadius: '16px',
-      fontSize: '2em',
+      borderRadius: '8px',
+      fontSize: 'clamp(1.25rem, 4vw, 2rem)',
       textAlign: 'center',
       zIndex: 1000,
       backdropFilter: 'blur(8px)',
       border: '1px solid rgba(255,255,255,0.15)',
       pointerEvents: showButton ? 'auto' : 'none',
+      maxWidth: 'min(640px, calc(100vw - 32px))',
+      boxShadow: '0 12px 40px rgba(0,0,0,0.35)',
     }}>
       <div style={{ textShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>{message}</div>
       {showButton && (
@@ -1072,7 +1278,7 @@ const GameStatusUI: React.FC<GameStatusUIProps> = ({ gameState, winnerInfo, coun
             background: 'linear-gradient(135deg, #00ff88, #0ff0b7)',
             color: '#0b1724',
             border: 'none',
-            borderRadius: '12px',
+            borderRadius: '8px',
             cursor: 'pointer',
             fontWeight: 800,
             boxShadow: '0 4px 20px rgba(0,255,136,0.4)',
@@ -1145,7 +1351,17 @@ const SpectatorCameraHandler: React.FC<{
     return null; // This component doesn't render anything itself
 };
 
-const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete, socket, localUsername, lobbyId, isPractice, playerWalletAddress }: SumoArenaSceneProps) => {
+const SumoArenaScene = ({
+  gameState: initialGameStateFromParent,
+  onMatchComplete,
+  socket,
+  localUsername,
+  lobbyId,
+  isPractice,
+  offline = false,
+  cpuDifficulty = 'normal',
+  playerWalletAddress,
+}: SumoArenaSceneProps) => {
   // Use initialGameStateFromParent as the initial state, internalGameState for mutable state
   if (process.env.NODE_ENV === 'development') {
     console.log(`[SumoArenaScene] Props -- localUsername: ${localUsername}, socket: ${!!socket}, gameState: ${initialGameStateFromParent}, lobbyId: ${lobbyId}`);
@@ -1164,8 +1380,10 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
   const [localSpawnPosition, setLocalSpawnPosition] = useState<[number, number, number] | null>(null);
   const [activePushEffects, setActivePushEffects] = useState<Array<{ id: string; position: THREE.Vector3; color: string }>>([]);
   const [localBallColor, setLocalBallColor] = useState<string>('#ff66cc');
+  const [hasUserStarted, setHasUserStarted] = useState(false);
   const mobileInputRef = useRef<{ x: number; y: number; jump: boolean; push: boolean }>({ x: 0, y: 0, jump: false, push: false });
   const localPlayerRef = useRef<any>(null);
+  const hasStartedCountdownRef = useRef(false);
   const localPlayerId = useMemo(
     () => playerWalletAddress || localUsername || '',
     [playerWalletAddress, localUsername],
@@ -1178,11 +1396,36 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
     }
     return 'Player';
   }, [localUsername, playerWalletAddress]);
+  const offlineCpuPlayers = useMemo<LivePlayer[]>(() => {
+    if (!offline) return [];
+    const config = CPU_DIFFICULTY_CONFIG[cpuDifficulty];
+    return Array.from({ length: config.count }, (_, index) => ({
+      id: `cpu-${index + 1}`,
+      username: `CPU ${index + 1}`,
+      status: 'In' as const,
+    }));
+  }, [cpuDifficulty, offline]);
+  const hudPlayers = useMemo<LivePlayer[]>(() => {
+    if (livePlayersForHUD.length > 0) return livePlayersForHUD;
+    if (!isPractice || !localPlayerId) return livePlayersForHUD;
+    return [{
+      id: localPlayerId,
+      username: localDisplayName,
+      status: localPlayerGameStatus === 'Eliminated' ? 'Out' : 'In',
+    }, ...offlineCpuPlayers];
+  }, [isPractice, livePlayersForHUD, localDisplayName, localPlayerGameStatus, localPlayerId, offlineCpuPlayers]);
+
+  const spawnPushAura = useCallback((pos: [number, number, number], color = '#00ffaa') => {
+    const id = `push-${performance.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    setActivePushEffects((prev) => [...prev, { id, position: new THREE.Vector3(pos[0], pos[1], pos[2]), color }]);
+  }, []);
 
 
   // Effect to synchronize internalGameState with prop changes, carefully
   useEffect(() => {
-    console.log(`[SumoArenaScene EFFECT] initialGameStateFromParent changed to: ${initialGameStateFromParent}. Current internal gameState: ${internalGameState}.`);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[SumoArenaScene EFFECT] initialGameStateFromParent changed to: ${initialGameStateFromParent}. Current internal gameState: ${internalGameState}.`);
+    }
     // More robust sync: if the prop changes and it's a "reset" type state, update internal state.
     // We no longer drive state from parent; server + local countdown are authoritative here.
     // Avoid overriding internal progressions like ACTIVE -> ROUND_OVER -> GAME_OVER unless prop explicitly dictates a reset.
@@ -1276,9 +1519,7 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
       setLivePlayersForHUD((prev) =>
         prev.map((p) => (p.id === playerId ? { ...p, status: 'Out' } : p)),
       )
-      // Play elimination sound
-      const eliminationSound = new Howl({ src: ['/sounds/knock_out_vox.mp3'], volume: 0.5 });
-      eliminationSound.play();
+      playSound('/sounds/knock_out_vox.mp3', 0.5);
     })
     // Handle push events from other players — apply impulse to local player if in range
     socket.on('playerPush', ({ playerId, position }: { playerId: string; position: [number, number, number] }) => {
@@ -1300,7 +1541,7 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
           true,
         );
         // Play hit sound when we actually get pushed
-        try { new Howl({ src: ['/sounds/ping.mp3'], volume: 0.4 }).play(); } catch {}
+        playSound('/sounds/ping.mp3', 0.4);
       }
     });
 
@@ -1309,9 +1550,7 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
       if (winner) {
         const isLocalWinner = winner === localPlayerId;
         setWinnerInfo({ username: isLocalWinner ? 'YOU' : winner })
-        // Play victory sound
-        const victorySound = new Howl({ src: ['/sounds/YOU DID IT POOKIE.mp3'], volume: 0.7 });
-        victorySound.play();
+        playSound('/sounds/YOU DID IT POOKIE.mp3', 0.7);
       } else {
         setWinnerInfo({ username: 'No winner' })
       }
@@ -1325,22 +1564,22 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
     };
   }, [socket, spectatedPlayerId, localPlayerGameStatus, spawnPushAura, localPlayerId, localSpawnPosition]);
 
-  // Simple local pre-game countdown once scene mounts and socket is ready
+  // Simple local pre-game countdown once the player unlocks audio and the live socket is ready.
   useEffect(() => {
-    if (!socket) return;
-    // Only trigger once from WAITING
-    if (internalGameState !== 'WAITING') return;
+    if (!hasUserStarted) return;
+    if (!offline && !socket) return;
+    if (hasStartedCountdownRef.current) return;
+    hasStartedCountdownRef.current = true;
     setInternalGameState('STARTING_COUNTDOWN');
     setCountdownUIDisplay(3);
-    
-    // Play countdown sound
-    const countdownSound = new Howl({ src: ['/sounds/ready set GO.mp3'], volume: 0.6 });
-    countdownSound.play();
+    playSound('/sounds/ready set GO.mp3', 0.6);
     
     let remaining = 3;
+    let completed = false;
     const timer = window.setInterval(() => {
       remaining -= 1;
       if (remaining <= 0) {
+        completed = true;
         window.clearInterval(timer);
         setCountdownUIDisplay(null);
         setInternalGameState('ACTIVE');
@@ -1350,18 +1589,15 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
     }, 1000);
     return () => {
       window.clearInterval(timer);
-      countdownSound.unload();
+      if (!completed) {
+        hasStartedCountdownRef.current = false;
+      }
     };
-  }, [socket, internalGameState]);
+  }, [hasUserStarted, offline, socket]);
 
   const handleLocalFallenOff = useCallback(() => {
     setLocalPlayerGameStatus('Eliminated');
     setIsSpectatorCamActive(true);
-  }, []);
-
-  const spawnPushAura = useCallback((pos: [number, number, number], color = '#00ffaa') => {
-    const id = `push-${performance.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    setActivePushEffects((prev) => [...prev, { id, position: new THREE.Vector3(pos[0], pos[1], pos[2]), color }]);
   }, []);
 
   const removePushEffect = useCallback((id: string) => {
@@ -1369,34 +1605,23 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
   }, []);
 
   const handlePushAction = useCallback((position: THREE.Vector3, playerRef: React.RefObject<any>) => {
-    if (!socket || !playerRef?.current) return;
+    if (!playerRef?.current) return;
     const pos = playerRef.current.translation();
     // Emit push event to server for relay to other clients
-    socket.emit('playerPush', {
-      position: [pos.x, pos.y, pos.z],
-      direction: [0, 0, 0],
-    });
+    if (socket) {
+      socket.emit('playerPush', {
+        position: [pos.x, pos.y, pos.z],
+        direction: [0, 0, 0],
+      });
+    }
     // Show local push aura on the floor (green for local player)
     spawnPushAura([pos.x, pos.y, pos.z], '#00ff88');
   }, [socket, spawnPushAura]);
 
-  // ... (rest of the component, many parts omitted for brevity) ...
-  
-  // Example of correcting a comparison:
-  // Inside handleLocalPlayerFallenOff or similar logic:
-  // if (some_condition_that_means_game_is_over_for_player) {
-  //   setInternalGameState('GAME_OVER'); // or ROUND_OVER based on rules
-  // }
-
-  // Ensure all internal logic that sets game states uses the correct GameState values.
-  // For example, where 'ENDED' was used:
-  // setCurrentRoundWinner(...) might lead to setInternalGameState('ROUND_OVER');
-  // determineOverallWinner(...) might lead to setInternalGameState('GAME_OVER');
-
-  const handleKeyboardControls = useCallback((event: KeyboardEvent) => {
-    // ... (existing keyboard controls)
-    // Example: if (internalGameState === 'ACTIVE') { ... }
-  }, [internalGameState]); // Add internalGameState if decisions depend on it
+  const handleStartMatch = useCallback(() => {
+    void unlockAudioContext();
+    setHasUserStarted(true);
+  }, []);
 
   // Mobile control callbacks
   const handleMobileMove = useCallback((x: number, y: number) => {
@@ -1460,12 +1685,12 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
           <Physics gravity={[0, -9.81, 0]}>
           <ArenaPlatform />
           {/* Local controllable player */}
-          {socket && localPlayerId && (
+          {localPlayerId && (
             <Player
               ref={localPlayerRef}
               ballColor={localBallColor}
               socket={socket}
-              isSpectatingOrEliminated={localPlayerGameStatus !== 'InGame'}
+              isSpectatingOrEliminated={localPlayerGameStatus !== 'InGame' || internalGameState !== 'ACTIVE'}
               onFallenOff={handleLocalFallenOff}
               username={localDisplayName}
               initialPosition={localSpawnPosition || [0, platformHeight / 2 + 1.2, platformRadius * 0.4]}
@@ -1475,6 +1700,27 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
               mobileInputRef={mobileInputRef}
             />
           )}
+
+          {offline && offlineCpuPlayers.map((cpu, index) => {
+            const angle = (Math.PI * 2 * index) / Math.max(offlineCpuPlayers.length, 1) + Math.PI;
+            const spawnRadius = platformRadius * 0.42;
+            return (
+              <PracticeCpuPlayer
+                key={cpu.id}
+                id={cpu.id}
+                username={cpu.username}
+                ballColor={CPU_COLORS[index % CPU_COLORS.length]}
+                initialPosition={[
+                  Math.sin(angle) * spawnRadius,
+                  platformHeight / 2 + 1.2,
+                  Math.cos(angle) * spawnRadius,
+                ]}
+                difficulty={cpuDifficulty}
+                localPlayerRef={localPlayerRef}
+                active={internalGameState === 'ACTIVE'}
+              />
+            );
+          })}
 
           {/* Remote players driven by server state */}
           {Object.values(remotePlayerEntities)
@@ -1510,7 +1756,7 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
             isSpectatorCamActive={isSpectatorCamActive}
             spectatedPlayerId={spectatedPlayerId}
             remotePlayerEntities={remotePlayerEntities}
-            livePlayersForHUD={livePlayersForHUD}
+            livePlayersForHUD={hudPlayers}
             onSetSpectatedPlayerId={setSpectatedPlayerId}
           />
         )}
@@ -1524,33 +1770,85 @@ const SumoArenaScene = ({ gameState: initialGameStateFromParent, onMatchComplete
         visible={internalGameState === 'ACTIVE' && localPlayerGameStatus === 'InGame'}
       />
 
-      <GameStatusUI
-        gameState={internalGameState}
-        winnerInfo={winnerInfo}
-        countdown={countdownUIDisplay}
-        isSpectating={localPlayerGameStatus === 'Spectating'}
-        localPlayerGameStatus={localPlayerGameStatus}
-        onMatchComplete={onMatchComplete}
-      />
+      {(!(!hasUserStarted && internalGameState === 'WAITING')) && (
+        <GameStatusUI
+          gameState={internalGameState}
+          winnerInfo={winnerInfo}
+          countdown={countdownUIDisplay}
+          isSpectating={localPlayerGameStatus === 'Spectating'}
+          localPlayerGameStatus={localPlayerGameStatus}
+          onMatchComplete={onMatchComplete}
+        />
+      )}
+      {!hasUserStarted && internalGameState === 'WAITING' && (
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'grid',
+          placeItems: 'center',
+          zIndex: 1200,
+          background: 'linear-gradient(180deg, rgba(2,6,23,0.18), rgba(2,6,23,0.42))',
+          pointerEvents: 'auto',
+        }}>
+          <div style={{
+            width: 'min(360px, calc(100vw - 32px))',
+            borderRadius: '10px',
+            border: '1px solid rgba(255,255,255,0.16)',
+            background: 'rgba(2,6,23,0.82)',
+            color: 'white',
+            padding: '18px',
+            textAlign: 'center',
+            boxShadow: '0 18px 48px rgba(0,0,0,0.4)',
+            backdropFilter: 'blur(10px)',
+            fontFamily: 'Inter, Arial, sans-serif',
+          }}>
+            <div style={{ fontFamily: 'Heavitas, Arial, sans-serif', fontSize: '1rem', marginBottom: 8 }}>
+              {offline ? 'Solo Practice' : 'Ready to Sumo?'}
+            </div>
+            <div style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.78)', marginBottom: 14 }}>
+              {offline ? `CPU difficulty: ${cpuDifficulty}` : socket ? 'Audio unlocks before the countdown starts.' : 'Connecting to the match room...'}
+            </div>
+            <button
+              type="button"
+              onClick={handleStartMatch}
+              disabled={!offline && !socket}
+              style={{
+                width: '100%',
+                border: 0,
+                borderRadius: '8px',
+                padding: '12px 14px',
+                cursor: !offline && !socket ? 'not-allowed' : 'pointer',
+                background: !offline && !socket ? 'rgba(148,163,184,0.35)' : 'linear-gradient(135deg, #bef264, #22c55e)',
+                color: '#06130d',
+                fontWeight: 900,
+                fontSize: '0.9rem',
+              }}
+            >
+              Tap / Click to Start
+            </button>
+          </div>
+        </div>
+      )}
       <GameHUD
-        players={livePlayersForHUD}
+        players={hudPlayers}
         onPlayerNameClick={(id) => setSpectatedPlayerId(id)}
         isSpectating={isSpectatorCamActive || localPlayerGameStatus === 'Spectating'}
         spectatedPlayerId={spectatedPlayerId}
         onSpectatePrevious={() => {
-          const alive = livePlayersForHUD.filter((p) => p.status === 'In')
+          const alive = hudPlayers.filter((p) => p.status === 'In')
           if (alive.length === 0) return
           const idx = alive.findIndex((p) => p.id === spectatedPlayerId)
           const next = idx <= 0 ? alive[alive.length - 1] : alive[idx - 1]
           setSpectatedPlayerId(next.id)
         }}
         onSpectateNext={() => {
-          const alive = livePlayersForHUD.filter((p) => p.status === 'In')
+          const alive = hudPlayers.filter((p) => p.status === 'In')
           if (alive.length === 0) return
           const idx = alive.findIndex((p) => p.id === spectatedPlayerId)
           const next = idx === -1 || idx === alive.length - 1 ? alive[0] : alive[idx + 1]
           setSpectatedPlayerId(next.id)
         }}
+        compactDuringPlay={internalGameState === 'ACTIVE' && localPlayerGameStatus === 'InGame'}
       />
     </div>
   );

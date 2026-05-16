@@ -28,17 +28,16 @@ export const LevelRenderer: React.FC<LevelRendererProps> = ({
   const collectiblesRef = useRef<{ [key: number]: THREE.Group }>({});
   const { scene } = useThree();
   
-  // Load consumable models
+  // Load the lightweight consumable models. The high-poly promethazine bottle is replaced
+  // with a small procedural pickup below because it is too expensive for repeated gameplay use.
   const leanCup = useGLTF('/models/consumables/lean_cup.glb');
   const fatJoint = useGLTF('/models/consumables/fat_joint.glb');
-  const promethazineLean = useGLTF('/models/consumables/promethazine_lean.glb');
   
   // Store models in a map for easy access
-  const consumableModels = useMemo(() => ({
+  const consumableModels = useMemo<Partial<Record<ConsumableType, THREE.Group>>>(() => ({
     'lean_cup': leanCup.scene.clone(),
-    'fat_joint': fatJoint.scene.clone(),
-    'promethazine_lean': promethazineLean.scene.clone()
-  }), [leanCup, fatJoint, promethazineLean]);
+    'fat_joint': fatJoint.scene.clone()
+  }), [leanCup.scene, fatJoint.scene]);
   
   // Prepare consumable models
   useEffect(() => {
@@ -307,7 +306,7 @@ export const LevelRenderer: React.FC<LevelRendererProps> = ({
         const consumableType = CONSUMABLE_TYPES[index % CONSUMABLE_TYPES.length] as ConsumableType;
         const model = consumableModels[consumableType];
         
-        if (!model) {
+        if (!model && consumableType !== 'promethazine_lean') {
           console.error(`Missing model for consumable type: ${consumableType}`);
           return null;
         }
@@ -354,7 +353,28 @@ export const LevelRenderer: React.FC<LevelRendererProps> = ({
               
               {/* Consumable model */}
               <group position={[0, yOffset, 0]} scale={modelScale}>
-                <primitive object={model.clone()} />
+                {consumableType === 'promethazine_lean' ? (
+                  <group>
+                    <mesh castShadow={false} receiveShadow={false} position={[0, 0.45, 0]}>
+                      <cylinderGeometry args={[0.32, 0.38, 0.9, 16]} />
+                      <meshStandardMaterial color="#7c3aed" transparent opacity={0.78} roughness={0.28} metalness={0.05} />
+                    </mesh>
+                    <mesh castShadow={false} receiveShadow={false} position={[0, 0.98, 0]}>
+                      <cylinderGeometry args={[0.18, 0.22, 0.28, 16]} />
+                      <meshStandardMaterial color="#efe7ff" roughness={0.35} />
+                    </mesh>
+                    <mesh castShadow={false} receiveShadow={false} position={[0, 1.17, 0]}>
+                      <cylinderGeometry args={[0.22, 0.22, 0.14, 16]} />
+                      <meshStandardMaterial color="#facc15" roughness={0.4} />
+                    </mesh>
+                    <mesh castShadow={false} receiveShadow={false} position={[0, 0.48, 0.33]}>
+                      <boxGeometry args={[0.42, 0.28, 0.025]} />
+                      <meshBasicMaterial color="#f8fafc" />
+                    </mesh>
+                  </group>
+                ) : (
+                  <primitive object={model!.clone()} />
+                )}
               </group>
               
               {/* Ring or glow effect */}

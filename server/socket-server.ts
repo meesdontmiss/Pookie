@@ -983,7 +983,7 @@ io.on('connection', (socket) => {
   // Optional identity registration ACK (client emits this)
   socket.on('register_identity', (wallet: string) => {
     try {
-      ;(socket.data as any).wallet = typeof wallet === 'string' ? wallet : ''
+      ;(socket.data as any).wallet = typeof wallet === 'string' ? wallet.trim() : ''
       socket.emit('identity_registered')
     } catch {}
   })
@@ -1017,26 +1017,40 @@ io.on('connection', (socket) => {
       if (data.type === 'join_lobby') {
         const lobby = lobbies.get(data.lobbyId)
         if (!lobby) return socket.emit('message', { type: 'error', message: 'Lobby not found', code: 'ERR_NOT_FOUND' } as ServerToClient)
-        if (lobby.players.size >= lobby.capacity) return socket.emit('message', { type: 'error', message: 'Lobby full', code: 'ERR_LOBBY_FULL' } as ServerToClient)
+        const wallet = typeof data.wallet === 'string' ? data.wallet.trim() : ''
+        if (!wallet) return socket.emit('message', { type: 'error', message: 'Missing player identity', code: 'ERR_BAD_IDENTITY' } as ServerToClient)
+        const existingPlayer = lobby.players.get(wallet)
+        if (lobby.players.size >= lobby.capacity && !existingPlayer) {
+          return socket.emit('message', { type: 'error', message: 'Lobby full', code: 'ERR_LOBBY_FULL' } as ServerToClient)
+        }
         // Join room and add/replace state
         await socket.join(lobby.id)
+        if (existingPlayer?.socketId && existingPlayer.socketId !== socket.id) {
+          socketToLobby.delete(existingPlayer.socketId)
+        }
         // For free lobbies, auto-lock wager (no wager needed)
         const playerState: PlayerState = { 
           socketId: socket.id, 
-          wallet: data.wallet, 
-          username: data.username, 
-          ready: false, 
-          wagerLocked: lobby.wager === 0 // Auto-lock for free lobbies
+          wallet, 
+          username: data.username?.trim() || existingPlayer?.username || walletShort(wallet), 
+          ready: existingPlayer?.ready ?? false, 
+          wagerLocked: existingPlayer?.wagerLocked ?? (lobby.wager === 0), // Auto-lock for free lobbies
+          txSignature: existingPlayer?.txSignature,
+          escrowAddress: existingPlayer?.escrowAddress,
+          wagerAmountSol: existingPlayer?.wagerAmountSol,
+          refunded: existingPlayer?.refunded,
+          isAi: existingPlayer?.isAi,
+          ballColor: existingPlayer?.ballColor,
         }
-        lobby.players.set(data.wallet, playerState)
+        lobby.players.set(wallet, playerState)
         socketToLobby.set(socket.id, lobby.id)
-        ;(socket.data as any).wallet = data.wallet
+        ;(socket.data as any).wallet = wallet
         broadcastLobby(lobby)
         broadcastLobbyCounts(lobby.id)
-        fireAndForget(upsertLobbyPlayerRecord(lobby.id, playerState), 'upsertLobbyPlayerRecord', { lobbyId: lobby.id, wallet: data.wallet })
+        fireAndForget(upsertLobbyPlayerRecord(lobby.id, playerState), 'upsertLobbyPlayerRecord', { lobbyId: lobby.id, wallet })
         fireAndForget(syncLobbyPlayerCountDb(lobby.id), 'syncLobbyPlayerCountDb', { lobbyId: lobby.id })
         metrics.lobbyJoins += 1
-        logger.info({ lobbyId: lobby.id, wallet: data.wallet, wagerLocked: playerState.wagerLocked }, 'Player joined lobby')
+        logger.info({ lobbyId: lobby.id, wallet, wagerLocked: playerState.wagerLocked }, 'Player joined lobby')
       }
       if (data.type === 'confirm_wager') {
         const lobby = lobbies.get(data.lobbyId); if (!lobby) return
@@ -1270,7 +1284,7 @@ io.on('connection', (socket) => {
       const wallet = (socket.data as any)?.wallet || ''
       if (!matchId || !wallet) return
       socket.to(matchId).emit('playerPush', {
-        playerId: String(wallet).toLowerCase(),
+        playerId: String(wallet),
         position: data.position,
         direction: data.direction,
       })
@@ -1288,7 +1302,7 @@ io.on('connection', (socket) => {
       const matchSnap = activeMatches.get(matchId)
       const playerColor = matchSnap?.roster?.find((r: any) => String(r.wallet || r.id || '').toLowerCase() === String(wallet).toLowerCase())?.ballColor
       socket.to(matchId).emit('playerStateUpdate', {
-        playerId: String(wallet).toLowerCase(),
+        playerId: String(wallet),
         position: data.position,
         rotation: data.rotation,
         ballColor: playerColor || '#ff66cc',
@@ -1429,6 +1443,4 @@ setInterval(() => {
     io.to(matchId).emit('gameStatusUpdate', payload)
   }
 }, MATCH_TICK_INTERVAL_MS)
-
-
 

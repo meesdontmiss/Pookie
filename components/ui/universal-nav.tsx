@@ -2,26 +2,40 @@
 
 import Link from 'next/link'
 // import { MusicPlayer } from '../audio/music-player'; // Temporarily commented out due to path issues
-import { Twitter, Home, Copy, Check } from 'lucide-react' // Assuming Twitter icon is used directly
+import { Twitter, Home, Copy, Check, ExternalLink, ImageIcon } from 'lucide-react' // Assuming Twitter icon is used directly
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui' // Temporarily comment out
 // Removed other lucide-react icons if they were only for MusicPlayer or NetworkStatus
 import { useEffect, useState } from 'react' // Import useEffect and useState
 import './universal-nav.css'
+import { POOKIE_MAGIC_EDEN_URL, POOKIE_TOKEN_ADDRESS } from '@/lib/pookie-links'
 
 export default function UniversalNav() {
   const [hasMounted, setHasMounted] = useState(false);
   const [copied, setCopied] = useState(false);
-  const contractAddress = "COMING SOON";
 
   useEffect(() => {
     setHasMounted(true);
   }, []);
 
   const handleCopyContract = () => {
-    if (contractAddress === "COMING SOON") return;
-    navigator.clipboard.writeText(contractAddress);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+
+    navigator.clipboard.writeText(POOKIE_TOKEN_ADDRESS).catch(() => {
+      const textarea = document.createElement("textarea");
+      textarea.value = POOKIE_TOKEN_ADDRESS;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+
+      try {
+        document.execCommand("copy");
+      } finally {
+        document.body.removeChild(textarea);
+      }
+    });
   };
 
   // isDevelopment variable related to NetworkStatus is removed.
@@ -37,33 +51,38 @@ export default function UniversalNav() {
               <Home size={20} strokeWidth={2.25} />
             </a>
           </Link>
-          <button
-            onClick={handleCopyContract}
-            disabled={contractAddress === "COMING SOON"}
-            className={`
-              hidden sm:flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold
-              transition-all duration-200
-              ${contractAddress === "COMING SOON" 
-                ? 'bg-white/5 text-white/40 cursor-not-allowed border border-white/10' 
-                : copied 
-                  ? 'bg-lime-500/20 text-lime-400 border border-lime-400/30' 
+          <div className="hidden md:flex items-center gap-2">
+            <button
+              onClick={handleCopyContract}
+              className={`
+                inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold
+                backdrop-blur-md transition-all duration-200
+                ${copied
+                  ? 'bg-lime-500/20 text-lime-300 border border-lime-400/40'
                   : 'bg-white/10 text-white hover:bg-white/20 border border-white/20 hover:border-cyan-400/50'
-              }
-            `}
-            title={contractAddress === "COMING SOON" ? "Token contract coming soon" : "Click to copy contract address"}
-          >
-            {copied ? (
-              <>
-                <Check size={14} />
-                <span className="hidden sm:inline">Copied!</span>
-              </>
-            ) : (
-              <>
-                <Copy size={14} />
-                <span className="hidden sm:inline">{contractAddress === "COMING SOON" ? "Coming Soon" : "Contract"}</span>
-              </>
-            )}
-          </button>
+                }
+              `}
+              title="Click to copy token address"
+            >
+              {copied ? <Check size={14} /> : <Copy size={14} />}
+              <span>{copied ? "Copied!" : "CA"}</span>
+              <span className="hidden xl:inline font-mono text-[11px] text-white/75">
+                {POOKIE_TOKEN_ADDRESS.slice(0, 6)}...{POOKIE_TOKEN_ADDRESS.slice(-6)}
+              </span>
+            </button>
+            <Link href={POOKIE_MAGIC_EDEN_URL} passHref legacyBehavior>
+              <a
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-white/10 text-white hover:bg-white/20 border border-white/20 hover:border-cyan-400/50 backdrop-blur-md transition-all duration-200"
+                title="Open POOKIE NFT collection on Magic Eden"
+              >
+                <ImageIcon size={14} />
+                <span>NFTs</span>
+                <ExternalLink size={12} className="text-white/60" />
+              </a>
+            </Link>
+          </div>
         </div>
 
         {/* Center Section: Title GIF - Hidden on mobile */}
@@ -98,4 +117,4 @@ export default function UniversalNav() {
       </div>
     </nav>
   )
-} 
+}

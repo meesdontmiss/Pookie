@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useGLTF } from '@react-three/drei'
+import { ASSET_PATHS } from '../utils/constants'
 
 interface UseModelProps {
   modelPath: string
@@ -29,5 +30,5 @@ export function useModel({ modelPath, onLoad, onError, draco = false }: UseModel
   return { model, isLoading, error }
 }
 
-// Preload the model
-useGLTF.preload('/models/POOKIE.glb') 
+// Preload the runtime character model used by interactive gameplay.
+useGLTF.preload(ASSET_PATHS.MODELS.GAME_PENGUIN) 

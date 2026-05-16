@@ -1,6 +1,6 @@
 // 'use client'; // No longer needed here
 
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import './globals.css'
 // Solana UI styles will be imported by ClientProviders
 // import '@solana/wallet-adapter-react-ui/styles.css' // Default styles for the wallet modal
@@ -32,14 +32,9 @@ const inter = Inter({ subsets: ['latin'] })
 
 // metadata can now be safely exported from this Server Component
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://www.pookiethepeng.com'),
   title: 'Pookie The Peng',
   description: 'Pookie Sumo Royale and Social Hub',
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 5,
-    userScalable: true,
-  },
   icons: {
     icon: '/images/POOKIE BLANK WADDLE gif.gif',
     shortcut: '/images/POOKIE BLANK WADDLE gif.gif',
@@ -69,6 +64,13 @@ export const metadata: Metadata = {
   },
 }
 
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+}
+
 export default function RootLayout({
   children,
 }: {
@@ -78,7 +80,6 @@ export default function RootLayout({
     <html lang="en" className="dark" suppressHydrationWarning>
       <head>
         <link rel="preload" href="/cursors/cursor.svg" as="image" type="image/svg+xml" />
-        <link rel="preload" href="/models/POOKIE.glb" as="fetch" crossOrigin="anonymous" />
         {/* Favicon (gif; will fallback to static in browsers that don’t animate) */}
         <link rel="icon" href="/images/POOKIE BLANK WADDLE gif.gif" type="image/gif" />
         <link rel="shortcut icon" href="/images/POOKIE BLANK WADDLE gif.gif" type="image/gif" />

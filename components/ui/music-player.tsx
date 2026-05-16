@@ -2,8 +2,10 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { Play, Pause, SkipForward, SkipBack, Music, Volume2, VolumeX } from 'lucide-react'
+import { usePathname } from 'next/navigation'
 
 export default function MusicPlayer() {
+  const pathname = usePathname()
   const [isExpanded, setIsExpanded] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTrack, setCurrentTrack] = useState(0)
@@ -75,6 +77,10 @@ export default function MusicPlayer() {
     // strip leading numbering like "01_" or "01- " etc.
     const human = noExt.replace(/^\d+\s*[_-]?\s*/, '')
     return human || 'Unknown Track'
+  }
+
+  if (pathname?.startsWith('/pookiesumoroyale/game')) {
+    return null
   }
 
   return (

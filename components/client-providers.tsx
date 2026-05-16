@@ -5,6 +5,7 @@ import { NextUIProvider } from '@nextui-org/react';
 import { NotificationProvider } from '@/components/ui/notification';
 import { ClientLayout } from '@/components/client-layout';
 import UniversalNav from '@/components/ui/universal-nav';
+import { usePathname } from 'next/navigation';
 
 // Solana specific imports are present
 import {
@@ -26,6 +27,8 @@ interface ClientProvidersProps {
 }
 
 export function ClientProviders({ children }: ClientProvidersProps) {
+  const pathname = usePathname();
+  const isGameRoute = pathname?.startsWith('/pookiesumoroyale/game');
   const network = WalletAdapterNetwork.Devnet;
   const endpoint = useMemo(() => clusterApiUrl(network), [network]);
   const wallets = useMemo(
@@ -43,8 +46,8 @@ export function ClientProviders({ children }: ClientProvidersProps) {
     <NextUIProvider>
       <NotificationProvider>
         <ClientLayout>
-          <UniversalNav />
-          <main className="pt-16">{children}</main> 
+          {!isGameRoute && <UniversalNav />}
+          <main className={isGameRoute ? '' : 'pt-16'}>{children}</main> 
         </ClientLayout>
       </NotificationProvider>
     </NextUIProvider>

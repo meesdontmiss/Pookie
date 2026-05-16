@@ -4,6 +4,7 @@ import React, { useRef, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
+import { ASSET_PATHS } from '../../utils/constants';
 
 interface PookieInBallEffectProps {
   position: [number, number, number];
@@ -23,7 +24,7 @@ export const PookieInBallEffect = ({
   const ballMaterialRef = useRef<THREE.MeshPhysicalMaterial>(null);
   const colorSideMaterialRef = useRef<THREE.MeshPhysicalMaterial>(null);
 
-  const { scene: pookieModel } = useGLTF('/models/POOKIE.glb');
+  const { scene: pookieModel } = useGLTF(ASSET_PATHS.MODELS.GAME_PENGUIN);
 
   useEffect(() => {
     if (pookieModel && pookieModelRef.current) {
@@ -37,8 +38,8 @@ export const PookieInBallEffect = ({
       clone.rotation.set(0, Math.PI + Math.PI / 2, 0); // Rotated 90 degrees clockwise (added PI/2)
       clone.traverse((child) => {
         if (child instanceof THREE.Mesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
+          child.castShadow = false;
+          child.receiveShadow = false;
           if (child.material) {
             child.material.side = THREE.FrontSide;
             child.material.transparent = false;
@@ -70,7 +71,7 @@ export const PookieInBallEffect = ({
     <group position={position} scale={scale}>
       <group ref={ballRef}>
         <mesh castShadow receiveShadow position={[0, 0, 0]} rotation={[0, 0, Math.PI/2]}>
-          <sphereGeometry args={[1, 32, 32, 0, Math.PI*2, 0, Math.PI/2]} />
+          <sphereGeometry args={[1, 24, 24, 0, Math.PI*2, 0, Math.PI/2]} />
           <meshPhysicalMaterial
             ref={ballMaterialRef}
             color="#e0f0ff"
@@ -88,7 +89,7 @@ export const PookieInBallEffect = ({
           />
         </mesh>
         <mesh castShadow receiveShadow position={[0, 0, 0]} rotation={[0, 0, -Math.PI/2]}>
-          <sphereGeometry args={[1, 32, 32, 0, Math.PI*2, 0, Math.PI/2]} />
+          <sphereGeometry args={[1, 24, 24, 0, Math.PI*2, 0, Math.PI/2]} />
           <meshPhysicalMaterial
             ref={colorSideMaterialRef}
             color={color}

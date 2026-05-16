@@ -1,0 +1,49 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "incremental": false,
+    "noEmit": true
+  },
+  "include": [
+    "next-env.d.ts",
+    "app/layout.tsx",
+    "app/pookiesumoroyale/**/*.ts",
+    "app/pookiesumoroyale/**/*.tsx",
+    "app/pookie-poker/**/*.ts",
+    "app/pookie-poker/**/*.tsx",
+    "app/api/lobbies/**/*.ts",
+    "app/api/wager/**/*.ts",
+    "components/lobby/**/*.ts",
+    "components/lobby/**/*.tsx",
+    "components/pookiesumoroyale/**/*.ts",
+    "components/pookiesumoroyale/**/*.tsx",
+    "components/pookie-poker/**/*.ts",
+    "components/pookie-poker/**/*.tsx",
+    "components/plug-penguin/minigames/pookie-sumo-royale/**/*.ts",
+    "components/plug-penguin/minigames/pookie-sumo-royale/**/*.tsx",
+    "components/plug-penguin/effects/**/*.ts",
+    "components/plug-penguin/effects/**/*.tsx",
+    "components/client-providers.tsx",
+    "components/ui/music-player.tsx",
+    "hooks/use-guest-identity.ts",
+    "hooks/use-lobby-counts.ts",
+    "hooks/use-wager.ts",
+    "lib/lobby-socket.ts",
+    "lib/escrow-service.ts",
+    "lib/pookie-poker/**/*.ts",
+    "server/poker-engine/**/*.ts",
+    "server/pookie-poker/**/*.ts",
+    "server/pookie-poker-server.ts",
+    "shared/**/*.ts"
+  ],
+  "exclude": [
+    "Cock Combat",
+    "node_modules",
+    ".next",
+    "**/*.bak.ts",
+    "**/*.bak.tsx",
+    "**/*.backup.ts",
+    "**/*.backup.tsx"
+  ]
+}

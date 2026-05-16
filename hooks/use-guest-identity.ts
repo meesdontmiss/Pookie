@@ -2,46 +2,73 @@
 
 import { useEffect, useState } from 'react'
 
+const GUEST_ID_KEY = 'guest_id'
+
+function readStoredGuestId(): string | null {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const stored = localStorage.getItem(GUEST_ID_KEY)
+    const fallback = (window as any).__guestId
+    const value =
+      typeof stored === 'string' && stored.trim()
+        ? stored
+        : typeof fallback === 'string' && fallback.trim()
+          ? fallback
+          : null
+
+    return value ? value.trim() : null
+  } catch {
+    try {
+      const fallback = (window as any).__guestId
+      return typeof fallback === 'string' && fallback.trim() ? fallback.trim() : null
+    } catch {
+      return null
+    }
+  }
+}
+
+function createGuestId() {
+  try {
+    return 'guest_' + (window.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 12))
+  } catch {
+    return 'guest_' + Math.random().toString(36).slice(2, 12)
+  }
+}
+
+function persistGuestId(guestId: string) {
+  try {
+    ;(window as any).__guestId = guestId
+  } catch {}
+
+  try {
+    localStorage.setItem(GUEST_ID_KEY, guestId)
+  } catch (e) {
+    console.warn('Failed to persist guest ID:', e)
+  }
+}
+
 /**
  * Generate and persist a stable guest identity for wallet-less sessions
  * Pattern from Cock Combat for free lobby access without wallet connection
  */
 export function useGuestIdentity() {
-  const [guestId, setGuestId] = useState<string | null>(null)
+  // Synchronously read from localStorage so the ID is available on the very first render.
+  const [guestId, setGuestId] = useState<string | null>(() => readStoredGuestId())
 
   useEffect(() => {
     if (typeof window === 'undefined') return
 
     try {
-      // Check for existing guest ID
-      let existing = localStorage.getItem('guest_id')
-      
+      let existing = readStoredGuestId()
+
       if (!existing) {
-        // Generate new guest ID
-        const gen = (() => {
-          try {
-            return 'guest_' + (window.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 12))
-          } catch {
-            return 'guest_' + Math.random().toString(36).slice(2, 12)
-          }
-        })()
-        
-        existing = gen
-        
-        try {
-          localStorage.setItem('guest_id', existing)
-        } catch (e) {
-          console.warn('Failed to persist guest ID:', e)
-        }
+        existing = createGuestId()
       }
-      
-      // Store in window for global access
-      try {
-        (window as any).__guestId = existing
-      } catch {}
-      
+
+      persistGuestId(existing)
       setGuestId(existing)
-      console.log('🎭 Guest identity:', existing)
+      console.log('Guest identity:', existing)
     } catch (e) {
       console.error('Failed to initialize guest identity:', e)
     }
@@ -65,18 +92,13 @@ export function getCurrentPlayerId(publicKey?: any): string | undefined {
         return (publicKey as any).toString()
       }
     }
-    
+
     // Fallback to guest identity
-    if (typeof window !== 'undefined') {
-      const gid = localStorage.getItem('guest_id') || (window as any).__guestId
-      if (gid && typeof gid === 'string') {
-        return gid
-      }
-    }
+    const gid = readStoredGuestId()
+    if (gid) return gid
   } catch (e) {
     console.warn('Failed to get player ID:', e)
   }
-  
+
   return undefined
 }
-

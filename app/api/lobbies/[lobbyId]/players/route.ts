@@ -129,14 +129,25 @@ export async function POST(
       );
     }
 
-    if (lobby.current_players >= lobby.max_players) {
+    const supabaseAdmin = getSupabaseAdmin()
+    const { data: existingPlayer, error: existingError } = await supabaseAdmin
+      .from("lobby_players")
+      .select("id")
+      .eq("lobby_id", lobbyId)
+      .eq("wallet_address", walletAddress)
+      .maybeSingle();
+
+    if (existingError) {
+      throw new Error(existingError.message);
+    }
+
+    if (lobby.current_players >= lobby.max_players && !existingPlayer) {
       return NextResponse.json(
         { error: "Lobby is full" },
         { status: 409 },
       );
     }
 
-    const supabaseAdmin = getSupabaseAdmin()
     const { data: player, error } = await supabaseAdmin
       .from("lobby_players")
       .upsert(

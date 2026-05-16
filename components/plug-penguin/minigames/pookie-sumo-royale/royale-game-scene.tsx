@@ -8,25 +8,28 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import SumoArenaScene from './SumoArenaScene';
 import type { GameState } from './SumoArenaScene';
 import { useRouter } from 'next/navigation'; // For navigation if needed (e.g. back to lobby browser)
+import type { CpuDifficulty } from './SumoArenaScene';
 
 interface RoyaleGameSceneProps {
   lobbyId: string;
   isPractice: boolean;
+  offline?: boolean;
+  cpuDifficulty?: CpuDifficulty;
   // Username might be passed if needed for display within the game, separate from lobby profile
   // initialUsername?: string | null; 
 }
 
 // Mock/placeholder for fetching static details if required by the game scene directly
 // In a real scenario, the game server might provide all necessary info
-const fetchGameStaticDetails = async (lobbyId: string, isPractice: boolean) => {
-  console.log(`[RoyaleGameScene] Fetching static details for game (lobby): ${lobbyId}, Practice: ${isPractice}`);
+const fetchGameStaticDetails = async (lobbyId: string, isPractice: boolean, offline = false) => {
+  console.log(`[RoyaleGameScene] Fetching static details for game (lobby): ${lobbyId}, Practice: ${isPractice}, Offline: ${offline}`);
   // Simulate API call
   await new Promise(resolve => setTimeout(resolve, 100)); 
   // Example: could return game mode, map, specific rules not covered by lobby settings
   return { 
     id: lobbyId, 
     name: `Game Session ${lobbyId.substring(0,6)}`, 
-    mode: isPractice ? 'Practice Sumo' : 'Competitive Sumo',
+    mode: offline ? 'Solo Practice' : isPractice ? 'Free Practice' : 'Competitive Sumo',
     map: 'Standard Arena' 
   };
 };
@@ -38,7 +41,7 @@ interface GameStaticDetails {
   map: string;
 }
 
-const RoyaleGameScene: React.FC<RoyaleGameSceneProps> = ({ lobbyId, isPractice }) => {
+const RoyaleGameScene: React.FC<RoyaleGameSceneProps> = ({ lobbyId, isPractice, offline = false, cpuDifficulty = 'normal' }) => {
   const router = useRouter();
   const { publicKey, connected: walletConnected } = useWallet();
 
@@ -57,7 +60,7 @@ const RoyaleGameScene: React.FC<RoyaleGameSceneProps> = ({ lobbyId, isPractice }
   }, [/* router */]); // router can be added if navigation is used
 
   useEffect(() => {
-    console.log(`[RoyaleGameScene] Mounting for lobbyId: ${lobbyId}, isPractice: ${isPractice}`);
+    console.log(`[RoyaleGameScene] Mounting for lobbyId: ${lobbyId}, isPractice: ${isPractice}, offline: ${offline}`);
     if (!lobbyId) {
       setGameStatusMessage('Error: Invalid Game ID.');
       setIsInGameView(false);
@@ -72,10 +75,21 @@ const RoyaleGameScene: React.FC<RoyaleGameSceneProps> = ({ lobbyId, isPractice }
       }
     }
 
-    setGameStatusMessage(`Initializing ${isPractice ? 'practice' : 'competitive'} game for ${lobbyId}...`);
+    const walletId = publicKey?.toBase58?.() || '';
+    const guest = (typeof window !== 'undefined') ? (localStorage.getItem('guest_id') || (window as any).__guestId) : null;
+    const identity = (walletId || guest || (offline ? 'solo_practice_guest' : '')).toString();
+    setLocalUsername(
+      offline && !walletId && !guest
+        ? 'Solo Player'
+        : identity
+          ? (identity.startsWith('guest_') ? `Guest ${identity.slice(-4)}` : identity.slice(0,8)+'...')
+          : null,
+    );
+
+    setGameStatusMessage(`Initializing ${offline ? 'solo practice' : isPractice ? 'free practice' : 'competitive'} game for ${lobbyId}...`);
 
     // Fetch any static details needed for this game instance
-    fetchGameStaticDetails(lobbyId, isPractice).then(details => {
+    fetchGameStaticDetails(lobbyId, isPractice, offline).then(details => {
       setGameStaticDetails(details);
       setGameStatusMessage(`Welcome to ${details.name} (${details.mode}) on ${details.map}!`);
       // SumoArenaScene can now take these details or lobbyId/isPractice directly
@@ -85,21 +99,24 @@ const RoyaleGameScene: React.FC<RoyaleGameSceneProps> = ({ lobbyId, isPractice }
       setIsInGameView(false);
     });
 
+    if (offline) {
+      setSocket(null);
+      return;
+    }
+
     // Connect a lightweight game socket for the active match room
     let socketInstance: ReturnType<typeof io> | null = null;
     try {
       const isProd = process.env.NODE_ENV === 'production';
-      const url = process.env.NEXT_PUBLIC_SOCKET_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:4001');
+      const url = isPractice
+        ? (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:4001')
+        : process.env.NEXT_PUBLIC_SOCKET_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:4001');
       const path = process.env.NEXT_PUBLIC_SOCKET_PATH || '/api/socketio';
       const transports = isProd ? ['websocket'] : ['polling','websocket'];
       const s = io(url, { path, transports, addTrailingSlash: false, withCredentials: true, autoConnect: true });
       socketInstance = s;
-      const id = publicKey?.toBase58?.() || '';
-      const guest = (typeof window !== 'undefined') ? (localStorage.getItem('guest_id') || (window as any).__guestId) : null;
-      const identity = (id || guest || '').toString();
-      setLocalUsername(identity ? (identity.startsWith('guest_') ? identity : identity.slice(0,8)+'...') : null);
       s.on('connect', () => {
-        try { if (identity) s.emit('register_identity', identity.toLowerCase()) } catch {}
+        try { if (identity) s.emit('register_identity', identity) } catch {}
         try { s.emit('join_match_room', { matchSessionId: lobbyId }) } catch {}
       });
       setSocket(s);
@@ -115,7 +132,7 @@ const RoyaleGameScene: React.FC<RoyaleGameSceneProps> = ({ lobbyId, isPractice }
       }
       setSocket(null);
     };
-  }, [lobbyId, isPractice, walletConnected, publicKey]);
+  }, [lobbyId, isPractice, offline, walletConnected, publicKey]);
 
 
   const goBackToLobbyBrowser = () => {
@@ -161,13 +178,15 @@ const RoyaleGameScene: React.FC<RoyaleGameSceneProps> = ({ lobbyId, isPractice }
           We might want a loading overlay here until gameStaticDetails are fetched 
           and SumoArenaScene is ready to render or has established its connection.
         */}
-        {gameStaticDetails && socket && (
+        {gameStaticDetails && (socket || offline) && (
              <SumoArenaScene 
                 lobbyId={lobbyId} 
                 isPractice={isPractice} 
                 playerWalletAddress={publicKey?.toBase58() || localUsername || 'guest_unknown'} // local id
                 socket={socket}
                 localUsername={localUsername}
+                offline={offline}
+                cpuDifficulty={cpuDifficulty}
                 gameState={'WAITING' as any}
                 // gameDetails={gameStaticDetails} // Pass fetched details if SumoArenaScene needs them
                 onMatchComplete={handleMatchComplete} 

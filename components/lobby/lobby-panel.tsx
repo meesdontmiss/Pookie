@@ -6,7 +6,7 @@ import type { HardLobby } from '@/shared/hardcoded-lobbies'
 import { BALL_COLORS } from '@/shared/contracts'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { useLobbySocket } from '@/lib/lobby-socket'
-import { useGuestIdentity, getCurrentPlayerId } from '@/hooks/use-guest-identity'
+import { useGuestIdentity } from '@/hooks/use-guest-identity'
 import { useWager } from '@/hooks/use-wager'
 import { Check, Clock, X, Loader2, ArrowLeft, Users, Trophy, Crown, Wallet } from 'lucide-react'
 
@@ -18,6 +18,11 @@ interface PlayerRow {
   wagerConfirmed: boolean
   ready: boolean
   ballColor?: string
+}
+
+function samePlayerId(a: string | null | undefined, b: string | null | undefined) {
+  if (!a || !b) return false
+  return a === b || a.toLowerCase() === b.toLowerCase()
 }
 
 export default function LobbyPanel({
@@ -33,8 +38,13 @@ export default function LobbyPanel({
 }) {
   const { publicKey } = useWallet()
   const guestId = useGuestIdentity()
-  const walletAddress = publicKey?.toBase58() ?? guestId
-  const myName = 'Player'
+  const lobbyAllowsGuest = (lobby?.wager ?? 0) === 0
+  const walletAddress = publicKey?.toBase58() ?? (lobbyAllowsGuest ? guestId : null)
+  const myName = publicKey
+    ? `${publicKey.toBase58().slice(0, 4)}...${publicKey.toBase58().slice(-4)}`
+    : walletAddress
+      ? `Guest ${walletAddress.slice(-4)}`
+      : 'Player'
   const { state, confirmWager, setReady, adminEndMatch, selectColor } = useLobbySocket(lobby?.id ?? null, myName, walletAddress, (lobby?.wager ?? 0) === 0)
   const { executeWager, isLoading: isWagerLoading, error: wagerError, reset: resetWager } = useWager()
   
@@ -57,7 +67,7 @@ export default function LobbyPanel({
   const [bottomPadding, setBottomPadding] = useState<number>(56)
   const [scrollMaxHeight, setScrollMaxHeight] = useState<number>(0)
 
-  const currentPlayerId = getCurrentPlayerId(publicKey)
+  const currentPlayerId = walletAddress
   const missingIdentity = !currentPlayerId
 
   // Measure layout for responsive scroll area
@@ -99,7 +109,7 @@ export default function LobbyPanel({
   const minRequired = lobby?.wager === 0 ? 2 : 4
   const paidPlayers = players.filter(p => p.ready).length
   const allPlayersReady = (players.length >= minRequired) && players.every(p => p.ready)
-  const currentPlayer = players.find(p => p.id === currentPlayerId)
+  const currentPlayer = players.find(p => samePlayerId(p.id, currentPlayerId))
   // Keep local flags in sync with authoritative server state for instant UI reflection
   useEffect(() => {
     if (currentPlayer) {
@@ -113,7 +123,12 @@ export default function LobbyPanel({
   }, [currentPlayer?.ready, currentPlayer?.wagerConfirmed, currentPlayerId])
 
   const handleReadyToggle = async () => {
-    if (missingIdentity) return
+    if (missingIdentity) {
+      if (!publicKey && !lobbyAllowsGuest) {
+        alert('Connect your wallet to join ranked lobbies')
+      }
+      return
+    }
 
     const isPaidLobby = (lobby?.wager ?? 0) > 0
     
@@ -149,7 +164,7 @@ export default function LobbyPanel({
       }
 
       // Free lobby - no transaction needed
-      if (result.isFree) {
+      if ('isFree' in result && result.isFree) {
         console.log('✅ Free lobby - no wager required')
         setMyWagerConfirmed(true)
         confirmWager(lobby.wager, 'FREE_LOBBY')
@@ -162,6 +177,9 @@ export default function LobbyPanel({
       setMyWagerConfirmed(true)
       
       // Notify server with transaction signature
+      if (!result.signature) {
+        throw new Error('Missing wager transaction signature')
+      }
       confirmWager(result.amount || lobby.wager, result.signature)
       
       // Auto-ready after successful wager
@@ -287,7 +305,7 @@ export default function LobbyPanel({
                       <span className="text-xs font-semibold truncate">
                         {player.username}
                       </span>
-                      {player.id === currentPlayerId && (
+                      {samePlayerId(player.id, currentPlayerId) && (
                         <span className="text-[9px] px-1 py-0 bg-cyan-600 text-white rounded">You</span>
                       )}
                     </div>
@@ -357,7 +375,7 @@ export default function LobbyPanel({
           <p className="text-[10px] text-white/70 mb-1.5 font-semibold">Choose Ball Color</p>
           <div className="flex flex-wrap gap-1.5">
             {BALL_COLORS.map((c) => {
-              const takenBy = players.find((p) => p.ballColor === c.hex && p.id !== currentPlayerId)
+              const takenBy = players.find((p) => p.ballColor === c.hex && !samePlayerId(p.id, currentPlayerId))
               const isSelected = currentPlayer?.ballColor === c.hex
               return (
                 <button
@@ -394,7 +412,7 @@ export default function LobbyPanel({
               <button
                 onClick={() => {
                   const matchId = prompt('Enter matchId to payout (leave blank for latest in this lobby):', '') || ''
-                  const winner = prompt('Enter winner wallet (base58):', walletAddress) || walletAddress
+                  const winner = prompt('Enter winner wallet (base58):', walletAddress || '') || walletAddress
                   const finalMatchId = matchId // server will validate
                   if (finalMatchId && winner) {
                     adminEndMatch(finalMatchId, winner)
@@ -428,7 +446,7 @@ export default function LobbyPanel({
               }`}
             >
               {missingIdentity ? (
-                <>INITIALIZE GUEST SESSION</>
+                <>{!publicKey && !lobbyAllowsGuest ? 'CONNECT WALLET' : 'INITIALIZE GUEST SESSION'}</>
               ) : isWagerLoading ? (
                 <>
                   <Loader2 size={16} className="animate-spin" />

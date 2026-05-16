@@ -4,6 +4,7 @@ import React, { useRef, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
+import { ASSET_PATHS } from '@/components/plug-penguin/utils/constants';
 
 interface MiniPookieBallOptimizedProps {
   position: [number, number, number];
@@ -19,7 +20,7 @@ export const MiniPookieBallOptimized = ({
   const ballRef = useRef<THREE.Group>(null);
   const pookieModelRef = useRef<THREE.Group>(null);
 
-  const { scene: pookieModel } = useGLTF('/models/POOKIE.glb');
+  const { scene: pookieModel } = useGLTF(ASSET_PATHS.MODELS.GAME_PENGUIN);
 
   useEffect(() => {
     if (pookieModel && pookieModelRef.current) {

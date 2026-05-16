@@ -1,10 +1,11 @@
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, useMemo } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useModel } from '../hooks/use-model'
 import { Text } from '@react-three/drei'
 import useKeyboardControls from '../hooks/use-keyboard-controls'
 import { useMouseControls } from '../hooks/use-mouse-controls'
+import { ASSET_PATHS } from '../utils/constants'
 
 interface PookieProps {
   onPositionChange?: (position: THREE.Vector3) => void
@@ -18,7 +19,7 @@ function Pookie({
   jumpHeight = 1.0
 }: PookieProps = {}) {
   const pookieRef = useRef<THREE.Group>(null)
-  const { model, isLoading } = useModel('/models/POOKIE.glb')
+  const { model, isLoading } = useModel({ modelPath: ASSET_PATHS.MODELS.GAME_PENGUIN })
   const [hovered, setHovered] = useState(false)
   const [clicked, setClicked] = useState(false)
   const [isJumping, setIsJumping] = useState(false)
@@ -39,6 +40,16 @@ function Pookie({
   
   // Access the camera for 3rd person positioning
   const { camera } = useThree()
+  const pookieModel = useMemo(() => {
+    const clone = model?.scene?.clone()
+    clone?.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = false
+        child.receiveShadow = false
+      }
+    })
+    return clone
+  }, [model?.scene])
   
   // Handle hover state
   const handlePointerOver = () => setHovered(true)
@@ -192,10 +203,7 @@ function Pookie({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isJumping])
   
-  if (isLoading) return null
-  
-  // Clone the model to avoid modifying the original
-  const pookieModel = model.scene.clone()
+  if (isLoading || !pookieModel) return null
   
   return (
     <group>
