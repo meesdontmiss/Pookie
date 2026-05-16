@@ -9,7 +9,7 @@ import styles from "./HomeHero.module.css"
 import StartSnow from "@/components/start-snow"
 import StartDock from "@/components/ui/start-dock"
 import PreloadPookieOnIdle from "@/components/preload-pookie-on-idle"
-import { POOKIE_MAGIC_EDEN_URL, POOKIE_TOKEN_ADDRESS } from "@/lib/pookie-links"
+import { POOKIE_DEXSCREENER_URL, POOKIE_MAGIC_EDEN_URL, POOKIE_TOKEN_ADDRESS } from "@/lib/pookie-links"
 
 const STAGE_WIDTH = 1920
 const STAGE_HEIGHT = 1080
@@ -283,7 +283,7 @@ export default function Home() {
                   title: 'PookHub',
                   onClick: () => {
                     if (typeof window !== 'undefined') {
-                      window.open('https://www.pornhub.com/model/pookiethepeng', '_blank')
+                      window.open('https://www.pornhub.com/model/pookiethepeng', '_blank', 'noopener,noreferrer')
                     }
                   },
                   imageSrc: '/images/pookie-smashin.gif',
@@ -293,7 +293,7 @@ export default function Home() {
                   title: 'Dexscreener',
                   onClick: () => {
                     if (typeof window !== 'undefined') {
-                      window.open('https://dexscreener.com', '_blank')
+                      window.open(POOKIE_DEXSCREENER_URL, '_blank', 'noopener,noreferrer')
                     }
                   },
                   imageSrc: '/images/POOKIE DOLLAR.jpg',
