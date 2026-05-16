@@ -27,6 +27,7 @@ export default function LobbyBrowserPage() {
   const [activeLobby, setActiveLobby] = useState<HardLobby | null>(null)
   const [isJoining, setIsJoining] = useState<string | null>(null);
   const [cpuDifficulty, setCpuDifficulty] = useState<CpuDifficulty>('normal')
+  const [practiceOptionsOpen, setPracticeOptionsOpen] = useState(false)
   
   // Subscribe to live lobby counts
   const lobbyCounts = useLobbyCounts()
@@ -99,29 +100,39 @@ export default function LobbyBrowserPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-black/45 p-1">
-                      {CPU_DIFFICULTIES.map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => setCpuDifficulty(option.value)}
-                          className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
-                            cpuDifficulty === option.value
-                              ? 'bg-lime-300 text-slate-950'
-                              : 'text-white/75 hover:text-white hover:bg-white/10'
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
                     <button
-                      onClick={handleSoloPractice}
+                      onClick={() => setPracticeOptionsOpen((open) => !open)}
                       className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-lime-400/30 text-lime-200 bg-black/60 hover:bg-lime-900/25 cursor-pointer flex items-center gap-1 transition-all"
                     >
                       <Bot className="h-3.5 w-3.5" />
                       Solo Practice
                     </button>
+                    {practiceOptionsOpen && (
+                      <>
+                        <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-black/45 p-1">
+                          {CPU_DIFFICULTIES.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => setCpuDifficulty(option.value)}
+                              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                                cpuDifficulty === option.value
+                                  ? 'bg-lime-300 text-slate-950'
+                                  : 'text-white/75 hover:text-white hover:bg-white/10'
+                              }`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          onClick={handleSoloPractice}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-lime-400/30 text-slate-950 bg-lime-300 hover:bg-lime-200 cursor-pointer flex items-center gap-1 transition-all"
+                        >
+                          Start Practice
+                        </button>
+                      </>
+                    )}
                     <button
                       onClick={() => router.push('/pookiesumoroyale/match-history')}
                       className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-cyan-600/30 text-cyan-400 bg-black/60 hover:bg-cyan-900/30 cursor-pointer flex items-center gap-1 transition-all"
