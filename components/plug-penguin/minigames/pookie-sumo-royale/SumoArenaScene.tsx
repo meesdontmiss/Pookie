@@ -1383,6 +1383,7 @@ const SumoArenaScene = ({
   const [hasUserStarted, setHasUserStarted] = useState(false);
   const mobileInputRef = useRef<{ x: number; y: number; jump: boolean; push: boolean }>({ x: 0, y: 0, jump: false, push: false });
   const localPlayerRef = useRef<any>(null);
+  const remotePlayerEntitiesRef = useRef<Record<string, RemotePlayerStateData>>({});
   const hasStartedCountdownRef = useRef(false);
   const localPlayerId = useMemo(
     () => playerWalletAddress || localUsername || '',
@@ -1417,8 +1418,15 @@ const SumoArenaScene = ({
 
   const spawnPushAura = useCallback((pos: [number, number, number], color = '#00ffaa') => {
     const id = `push-${performance.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    setActivePushEffects((prev) => [...prev, { id, position: new THREE.Vector3(pos[0], pos[1], pos[2]), color }]);
+    setActivePushEffects((prev) => [
+      ...prev,
+      { id, position: new THREE.Vector3(pos[0], platformHeight / 2 + 0.06, pos[2]), color },
+    ]);
   }, []);
+
+  useEffect(() => {
+    remotePlayerEntitiesRef.current = remotePlayerEntities;
+  }, [remotePlayerEntities]);
 
 
   // Effect to synchronize internalGameState with prop changes, carefully
@@ -1523,8 +1531,12 @@ const SumoArenaScene = ({
     })
     // Handle push events from other players — apply impulse to local player if in range
     socket.on('playerPush', ({ playerId, position }: { playerId: string; position: [number, number, number] }) => {
-      // Show floor aura for the remote pusher (red/orange tint)
-      spawnPushAura(position, '#ff4466');
+      // Show the floor aura under the player who initiated the push, not at the hit/contact point.
+      const pusher = remotePlayerEntitiesRef.current[playerId];
+      const pusherPosition: [number, number, number] = pusher?.position
+        ? [pusher.position.x, pusher.position.y, pusher.position.z]
+        : position;
+      spawnPushAura(pusherPosition, '#ff4466');
 
       if (!localPlayerRef.current || localPlayerGameStatus !== 'InGame') return;
       const localPos = localPlayerRef.current.translation();
@@ -1614,7 +1626,7 @@ const SumoArenaScene = ({
         direction: [0, 0, 0],
       });
     }
-    // Show local push aura on the floor (green for local player)
+    // Show local push aura on the floor beneath the initiating player.
     spawnPushAura([pos.x, pos.y, pos.z], '#00ff88');
   }, [socket, spawnPushAura]);
 

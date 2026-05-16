@@ -176,12 +176,18 @@ function PookieBlimp() {
 type BodyEntry = { id: string; body: any }
 const CINEMATIC_PLAYER_BODIES: BodyEntry[] = []
 
+type CinematicPushFx = {
+  id: string
+  position: THREE.Vector3
+  color: string
+}
+
 function RollingPlayer({ color, spawnAngle }: { color: string; spawnAngle: number }) {
   const bodyRef = useRef<any>(null)
   const targetDirRef = useRef<THREE.Vector3>(new THREE.Vector3())
   const lastChangeRef = useRef(0)
   const lastPushRef = useRef(0)
-  const [fxId, setFxId] = useState<string | null>(null)
+  const [fx, setFx] = useState<CinematicPushFx | null>(null)
   const idRef = useRef<string>(Math.random().toString(36).slice(2))
 
   // Initial spawn around a ring
@@ -270,7 +276,13 @@ function RollingPlayer({ color, spawnAngle }: { color: string; spawnAngle: numbe
           body.applyImpulse({ x: 0, y: 0, z: 0 }, true)
           body.applyTorqueImpulse({ x: 0, y: (Math.random() - 0.5) * 0.08, z: 0 }, true)
           // Visual ring
-          try { setFxId(Math.random().toString(36).slice(2)) } catch {}
+          try {
+            setFx({
+              id: Math.random().toString(36).slice(2),
+              position: new THREE.Vector3(myPos.x, platformHeight / 2 + 0.06, myPos.z),
+              color: '#00ffea',
+            })
+          } catch {}
           lastPushRef.current = now
         }
       }
@@ -278,31 +290,33 @@ function RollingPlayer({ color, spawnAngle }: { color: string; spawnAngle: numbe
   })
 
   return (
-    <RigidBody
-      ref={bodyRef}
-      colliders={false}
-      canSleep={false}
-      linearDamping={0.12}
-      angularDamping={0.08}
-      friction={1.0}
-      restitution={0.2}
-      position={[spawnX, spawnHeight, spawnZ]}
-      name="cinematic-player"
-    >
-      <BallCollider args={[1]} />
-      <PookieInBallEffect position={[0, 0, 0]} scale={1.0} color={color} />
-      {fxId && (
+    <>
+      <RigidBody
+        ref={bodyRef}
+        colliders={false}
+        canSleep={false}
+        linearDamping={0.12}
+        angularDamping={0.08}
+        friction={1.0}
+        restitution={0.2}
+        position={[spawnX, spawnHeight, spawnZ]}
+        name="cinematic-player"
+      >
+        <BallCollider args={[1]} />
+        <PookieInBallEffect position={[0, 0, 0]} scale={1.0} color={color} />
+      </RigidBody>
+      {fx && (
         <PushEffect
-          id={fxId}
-          position={new THREE.Vector3(0, 0.01, 0)}
-          onComplete={() => setFxId(null)}
+          id={fx.id}
+          position={fx.position}
+          onComplete={() => setFx(null)}
           duration={420}
           initialRadius={0.4}
           maxRadius={2.6}
-          color="#00ffea"
+          color={fx.color}
         />
       )}
-    </RigidBody>
+    </>
   )
 }
 
