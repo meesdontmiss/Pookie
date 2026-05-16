@@ -2,12 +2,26 @@
 
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Text } from '@react-three/drei'
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import type { SeatVisualState } from '@/shared/pookie-poker'
 import { POKIE_POKER_SEAT_ANCHORS } from '@/shared/pookie-poker'
 
 export function PokerScene({ seats }: { seats: SeatVisualState[] }) {
+  const [webglSupported, setWebglSupported] = useState(true)
+
+  useEffect(() => {
+    try {
+      const canvas = document.createElement('canvas')
+      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl')
+      setWebglSupported(Boolean(gl))
+    } catch {
+      setWebglSupported(false)
+    }
+  }, [])
+
+  if (!webglSupported) return <RooftopSceneFallback seats={seats} />
+
   return (
     <Canvas camera={{ position: [0, 5.4, 7.2], fov: 46 }} shadows dpr={[1, 1.5]}>
       <color attach="background" args={['#070815']} />
@@ -19,6 +33,7 @@ export function PokerScene({ seats }: { seats: SeatVisualState[] }) {
       <RooftopEnvironment />
       <PokerTableModel />
       <PotGlow />
+      <ChipStacks />
       {POKIE_POKER_SEAT_ANCHORS.map((anchor) => (
         <SeatAvatar
           key={anchor.seatIndex}
@@ -31,6 +46,33 @@ export function PokerScene({ seats }: { seats: SeatVisualState[] }) {
       </Text>
       <OrbitControls enablePan={false} enableZoom={false} minPolarAngle={0.75} maxPolarAngle={1.25} autoRotate autoRotateSpeed={0.25} />
     </Canvas>
+  )
+}
+
+function RooftopSceneFallback({ seats }: { seats: SeatVisualState[] }) {
+  return (
+    <div className="relative h-full w-full overflow-hidden bg-[radial-gradient(circle_at_50%_42%,rgba(14,165,233,0.32),transparent_24%),linear-gradient(180deg,#17133b_0%,#070815_64%,#020617_100%)]">
+      <div className="absolute inset-x-0 bottom-0 h-1/2 bg-[radial-gradient(ellipse_at_center,rgba(250,204,21,0.2),transparent_35%)]" />
+      <div className="absolute left-1/2 top-1/2 h-52 w-80 -translate-x-1/2 -translate-y-1/2 rounded-[50%] border border-amber-200/50 bg-emerald-950/80 shadow-[0_0_70px_rgba(34,211,238,0.22)]" />
+      {POKIE_POKER_SEAT_ANCHORS.map((anchor) => {
+        const seat = seats.find((candidate) => candidate.seatIndex === anchor.seatIndex)
+        return (
+          <div
+            key={anchor.seatIndex}
+            className={[
+              'absolute grid h-12 w-12 place-items-center rounded-full border text-xs font-black',
+              seat?.activeTurn ? 'border-amber-200 bg-amber-300 text-zinc-950' : seat?.occupied ? 'border-cyan-200/60 bg-cyan-950 text-cyan-100' : 'border-white/15 bg-white/10 text-zinc-400',
+            ].join(' ')}
+            style={{
+              left: `${50 + anchor.position[0] * 10}%`,
+              top: `${48 + anchor.position[2] * 12}%`,
+            }}
+          >
+            {seat?.occupied ? seat.displayName?.slice(0, 2).toUpperCase() : anchor.seatIndex + 1}
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -52,10 +94,18 @@ function RooftopEnvironment() {
         <meshStandardMaterial color="#34364a" roughness={0.7} />
       </mesh>
       {skyline.map((building, index) => (
-        <mesh key={index} position={[building.x, building.h / 2 - 0.04, building.z]}>
-          <boxGeometry args={[0.42, building.h, 0.35]} />
-          <meshStandardMaterial color={index % 3 === 0 ? '#17203a' : '#111827'} emissive={index % 5 === 0 ? '#0ea5e9' : '#000000'} emissiveIntensity={0.35} />
-        </mesh>
+        <group key={index} position={[building.x, building.h / 2 - 0.04, building.z]}>
+          <mesh>
+            <boxGeometry args={[0.42, building.h, 0.35]} />
+            <meshStandardMaterial color={index % 3 === 0 ? '#17203a' : '#111827'} emissive={index % 5 === 0 ? '#0ea5e9' : '#000000'} emissiveIntensity={0.35} />
+          </mesh>
+          {index % 2 === 0 ? (
+            <mesh position={[0, 0.15, 0.181]}>
+              <planeGeometry args={[0.18, Math.max(0.24, building.h * 0.42)]} />
+              <meshBasicMaterial color="#bae6fd" transparent opacity={0.28} />
+            </mesh>
+          ) : null}
+        </group>
       ))}
       {[-5.4, -3.8, 4.4, 5.6].map((x, index) => (
         <Palm key={index} position={[x, 0, index % 2 ? -3.8 : 3.6]} />
@@ -146,3 +196,23 @@ function PotGlow() {
   )
 }
 
+function ChipStacks() {
+  return (
+    <group position={[0, 0.94, 0]}>
+      {[
+        [-0.18, 0, '#facc15'],
+        [0, 0.05, '#38bdf8'],
+        [0.18, 0.02, '#f472b6'],
+      ].map(([x, y, color], index) => (
+        <group key={index} position={[Number(x), Number(y), 0]}>
+          {Array.from({ length: 4 }).map((_, chipIndex) => (
+            <mesh key={chipIndex} position={[0, chipIndex * 0.035, 0]} castShadow>
+              <cylinderGeometry args={[0.11, 0.11, 0.028, 24]} />
+              <meshStandardMaterial color={String(color)} roughness={0.35} metalness={0.2} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+    </group>
+  )
+}

@@ -39,6 +39,7 @@ export type HandState = {
   deck: Card[]
   players: EnginePlayer[]
   actionLog: ActionLogEntry[]
+  actedThisStreet: number[]
   sawFlop: boolean
   rakeConfig: RakeConfig
   settled: boolean
@@ -90,4 +91,3 @@ export type SettlementResult = {
     winnerWallets: string[]
   }>
 }
-

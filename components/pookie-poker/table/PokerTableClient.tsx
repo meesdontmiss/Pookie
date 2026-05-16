@@ -13,6 +13,7 @@ import { OpponentSeatHUD } from '../hud/OpponentSeatHUD'
 import { TableControls } from '../hud/TableControls'
 import { TableHUD } from '../hud/TableHUD'
 import { TableLog } from '../hud/TableLog'
+import { ShowdownOverlay } from '../hud/ShowdownOverlay'
 
 const PokerScene = dynamic(() => import('../three/PokerScene').then((mod) => mod.PokerScene), {
   ssr: false,
@@ -213,11 +214,12 @@ export function PokerTableClient({ tableId }: { tableId: string }) {
       </div>
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_48%,transparent_0,rgba(5,6,16,0.16)_34%,rgba(5,6,16,0.78)_100%)]" />
       <TableHUD view={view} />
+      <ShowdownOverlay view={view} />
 
       <div className="pointer-events-none absolute inset-x-3 top-44 z-20 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:inset-x-8 lg:grid-cols-5">
         {opponents.map((player) => (
           <div key={player.wallet} className="pointer-events-auto">
-            <OpponentSeatHUD player={player} active={view.currentTurnSeat === player.seatIndex} />
+            <OpponentSeatHUD player={player} active={view.currentTurnSeat === player.seatIndex} dealer={view.dealerSeat === player.seatIndex} />
           </div>
         ))}
       </div>

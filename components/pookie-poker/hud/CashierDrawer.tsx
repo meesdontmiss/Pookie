@@ -18,8 +18,11 @@ export function CashierDrawer({ view }: { view: ClientTableView }) {
           <span>Real money</span>
           <span className="font-bold text-red-200">Disabled</span>
         </div>
+        <div className="flex justify-between gap-4">
+          <span>Custody</span>
+          <span className="text-right font-bold text-cyan-100">Hot/cold ready</span>
+        </div>
       </div>
     </div>
   )
 }
-

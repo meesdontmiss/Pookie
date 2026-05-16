@@ -33,14 +33,16 @@ export function createHandState(params: {
     holeCards: [deck[index * 2], deck[index * 2 + 1]],
   }))
 
-  const smallBlindSeat = nextOccupiedSeat(enginePlayers, params.dealerSeat)
+  const dealerSeat = normalizeDealerSeat(enginePlayers, params.dealerSeat)
+  const headsUp = enginePlayers.length === 2
+  const smallBlindSeat = headsUp ? dealerSeat : nextOccupiedSeat(enginePlayers, dealerSeat)
   const bigBlindSeat = nextOccupiedSeat(enginePlayers, smallBlindSeat)
-  const firstActionSeat = nextOccupiedSeat(enginePlayers, bigBlindSeat)
+  const firstActionSeat = headsUp ? smallBlindSeat : nextOccupiedSeat(enginePlayers, bigBlindSeat)
   const state: HandState = {
     tableId: params.tableId,
     handNumber: params.handNumber,
     street: 'preflop',
-    dealerSeat: params.dealerSeat,
+    dealerSeat,
     smallBlindSeat,
     bigBlindSeat,
     currentTurnSeat: firstActionSeat,
@@ -51,6 +53,7 @@ export function createHandState(params: {
     deck: deck.slice(enginePlayers.length * 2),
     players: enginePlayers,
     actionLog: [],
+    actedThisStreet: [],
     sawFlop: false,
     rakeConfig: params.rakeConfig,
     settled: false,
@@ -92,6 +95,7 @@ export function applyPokerAction(state: HandState, wallet: string, action: Poker
 
   const before = stateHash(next)
   const toCall = next.currentBet - player.currentBet
+  let openedOrRaised = false
 
   if (action === 'fold') {
     player.folded = true
@@ -105,6 +109,7 @@ export function applyPokerAction(state: HandState, wallet: string, action: Poker
     commitChips(next, player, amount)
     next.currentBet = player.currentBet
     next.minRaise = amount
+    openedOrRaised = true
   } else if (action === 'raise') {
     if (amount <= next.currentBet) throw new Error('Raise amount must exceed current bet')
     const raiseSize = amount - next.currentBet
@@ -114,6 +119,7 @@ export function applyPokerAction(state: HandState, wallet: string, action: Poker
     commitChips(next, player, amount - player.currentBet)
     next.minRaise = raiseSize
     next.currentBet = player.currentBet
+    openedOrRaised = true
   } else if (action === 'allin') {
     const targetBet = player.currentBet + player.stack
     commitChips(next, player, player.stack)
@@ -121,12 +127,18 @@ export function applyPokerAction(state: HandState, wallet: string, action: Poker
       const raiseSize = targetBet - next.currentBet
       if (raiseSize >= next.minRaise) next.minRaise = raiseSize
       next.currentBet = targetBet
+      openedOrRaised = true
     }
   } else if (action === 'show' || action === 'muck') {
     throw new Error(`${action} is only valid during showdown`)
   }
 
   player.lastAction = action
+  if (openedOrRaised) {
+    next.actedThisStreet = [player.seatIndex]
+  } else if (!next.actedThisStreet.includes(player.seatIndex)) {
+    next.actedThisStreet.push(player.seatIndex)
+  }
   next.actionLog.push({
     sequence: next.actionLog.length + 1,
     wallet,
@@ -162,18 +174,15 @@ function advanceTurnOrStreet(state: HandState) {
     return
   }
 
-  const actorsNeedingAction = state.players.filter(
-    (player) => !player.folded && !player.allIn && player.currentBet < state.currentBet,
-  )
-  if (actorsNeedingAction.length === 0) {
-    const canAct = state.players.filter((player) => !player.folded && !player.allIn)
-    const lastActionSeat = state.currentTurnSeat
-    const nextSeat = lastActionSeat === undefined ? undefined : nextOccupiedSeat(canAct, lastActionSeat)
-    const everyoneMatched = state.players.every((player) => player.folded || player.allIn || player.currentBet === state.currentBet)
-    if (everyoneMatched && (canAct.length <= 1 || nextSeat === firstActiveSeatAfterDealer(state))) {
-      advanceStreet(state)
+  if (bettingRoundComplete(state)) {
+    if (activePlayers.every((player) => player.allIn)) {
+      dealRemainingBoard(state)
+      state.street = 'showdown'
+      state.currentTurnSeat = undefined
       return
     }
+    advanceStreet(state)
+    return
   }
 
   if (state.currentTurnSeat !== undefined) {
@@ -185,6 +194,7 @@ function advanceStreet(state: HandState) {
   for (const player of state.players) player.currentBet = 0n
   state.currentBet = 0n
   state.minRaise = 0n
+  state.actedThisStreet = []
 
   if (state.street === 'preflop') {
     state.street = 'flop'
@@ -210,14 +220,39 @@ function firstActiveSeatAfterDealer(state: HandState) {
 }
 
 function nextActionSeat(state: HandState, fromSeat: number) {
-  const eligible = state.players.filter((player) => !player.folded && !player.allIn)
+  const eligible = state.players.filter((player) => playerNeedsAction(state, player))
   if (eligible.length === 0) return undefined
   return nextOccupiedSeat(eligible, fromSeat)
+}
+
+function bettingRoundComplete(state: HandState) {
+  return state.players.every((player) => !playerNeedsAction(state, player))
+}
+
+function playerNeedsAction(state: HandState, player: EnginePlayer) {
+  if (player.folded || player.allIn) return false
+  if (player.currentBet < state.currentBet) return true
+  return !state.actedThisStreet.includes(player.seatIndex)
+}
+
+function dealRemainingBoard(state: HandState) {
+  if (state.communityCards.length < 3) {
+    state.communityCards.push(state.deck.shift() as Card, state.deck.shift() as Card, state.deck.shift() as Card)
+    state.sawFlop = true
+  }
+  while (state.communityCards.length < 5) {
+    state.communityCards.push(state.deck.shift() as Card)
+  }
 }
 
 function nextOccupiedSeat(players: Pick<EnginePlayer, 'seatIndex'>[], fromSeat: number) {
   const seats = players.map((player) => player.seatIndex).sort((a, b) => a - b)
   return seats.find((seat) => seat > fromSeat) ?? seats[0]
+}
+
+function normalizeDealerSeat(players: Pick<EnginePlayer, 'seatIndex'>[], requestedSeat: number) {
+  if (players.some((player) => player.seatIndex === requestedSeat)) return requestedSeat
+  return players.map((player) => player.seatIndex).sort((a, b) => a - b)[0]
 }
 
 function getPlayerBySeat(state: HandState, seatIndex: number) {
@@ -248,6 +283,7 @@ export function stateHash(state: HandState) {
           allIn: player.allIn,
           lastAction: player.lastAction,
         })),
+        actedThisStreet: state.actedThisStreet,
       }),
     )
     .digest('hex')
@@ -262,7 +298,7 @@ export function cloneHandState(state: HandState): HandState {
       ...player,
       holeCards: player.holeCards.map((card) => ({ ...card })),
     })),
+    actedThisStreet: [...state.actedThisStreet],
     actionLog: state.actionLog.map((entry) => ({ ...entry })),
   }
 }
-

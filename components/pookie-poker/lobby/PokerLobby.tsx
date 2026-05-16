@@ -6,6 +6,7 @@ import type { TablePublicState } from '@/shared/pookie-poker'
 import { POKIE_POKER_LOBBY_TABLES } from '@/lib/pookie-poker/mock-data'
 import { formatLamports } from '@/lib/pookie-poker/format'
 import { getPookiePokerSocket } from '@/lib/pookie-poker/socket-client'
+import { CreatePrivateTable } from './CreatePrivateTable'
 
 export function PokerLobby() {
   const [showPrivate, setShowPrivate] = useState(false)
@@ -102,6 +103,7 @@ export function PokerLobby() {
             </div>
           </div>
 
+          <div className="space-y-4">
           <div className="rounded-md border border-white/10 bg-black/45 p-4 shadow-2xl backdrop-blur">
             <div className="mb-4 flex items-center justify-between gap-4">
               <div>
@@ -121,19 +123,24 @@ export function PokerLobby() {
                       <span className="rounded bg-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-zinc-200">{table.tableType}</span>
                     </div>
                     <p className="mt-1 text-sm text-zinc-300">
-                      {formatLamports(table.smallBlindLamports)} / {formatLamports(table.bigBlindLamports)} · {table.maxPlayers}-max · {table.rakeInfo.rakeBps / 100}% rake
+                      {formatLamports(table.smallBlindLamports)} / {formatLamports(table.bigBlindLamports)} / {table.maxPlayers}-max / {table.rakeInfo.rakeBps / 100}% rake
                     </p>
                   </div>
                   <div className="mt-4 text-sm font-bold text-amber-200 sm:mt-0 sm:self-center">
-                    {table.players.length}/{table.maxPlayers} · {table.status}
+                    {table.players.length}/{table.maxPlayers} / {table.status}
                   </div>
                 </Link>
               ))}
             </div>
             <div className="mt-4 rounded-md border border-red-400/20 bg-red-950/20 p-3 text-sm text-red-100">
-              POOKIE_POKER_REAL_MONEY_ENABLED=false is the required default. Solana escrow is intentionally kept for the devnet phase.
+              POOKIE_POKER_REAL_MONEY_ENABLED=false is the required default. The money path is backend hot/cold custody on Neon, with no poker smart contract.
             </div>
           </div>
+          <CreatePrivateTable />
+          </div>
+        </div>
+        <div className="relative mx-auto mt-8 max-w-7xl rounded-md border border-white/10 bg-black/35 p-4 text-sm text-zinc-300 backdrop-blur">
+          Play-money prototype only. No cash-out, no real-money staking, no production launch without jurisdiction gating, age/KYC checks, geolocation, AML monitoring, responsible gaming limits, and admin kill switch review.
         </div>
       </section>
     </div>
@@ -148,4 +155,3 @@ function Stat({ label, value }: { label: string; value: string }) {
     </div>
   )
 }
-

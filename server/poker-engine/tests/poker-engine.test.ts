@@ -4,6 +4,7 @@ import { evaluateBestHand } from '../evaluator'
 import { calculateRake } from '../rake'
 import { settleShowdown } from '../settlement'
 import { replayHand } from '../replay'
+import { applyPokerAction, createHandState } from '../actions'
 import type { Card, RakeConfig } from '../../../shared/pookie-poker'
 
 const rakeConfig: RakeConfig = {
@@ -99,8 +100,8 @@ test('replay produces stable final hash', () => {
     bigBlind: 20n,
     rakeConfig,
     actions: [
-      { wallet: 'b', action: 'call' as const },
-      { wallet: 'a', action: 'check' as const },
+      { wallet: 'a', action: 'call' as const },
+      { wallet: 'b', action: 'check' as const },
       { wallet: 'b', action: 'check' as const },
       { wallet: 'a', action: 'check' as const },
       { wallet: 'b', action: 'check' as const },
@@ -110,4 +111,86 @@ test('replay produces stable final hash', () => {
     ],
   }
   assert.equal(replayHand(input).hash, replayHand(input).hash)
+})
+
+test('heads-up dealer posts small blind and acts first preflop', () => {
+  const state = createHandState({
+    tableId: 'heads-up',
+    handNumber: 1,
+    seed: 'heads-up-seed',
+    players: [
+      { wallet: 'dealer', seatIndex: 0, stack: 1000n },
+      { wallet: 'bb', seatIndex: 1, stack: 1000n },
+    ],
+    dealerSeat: 0,
+    smallBlind: 10n,
+    bigBlind: 20n,
+    rakeConfig,
+  })
+
+  assert.equal(state.smallBlindSeat, 0)
+  assert.equal(state.bigBlindSeat, 1)
+  assert.equal(state.currentTurnSeat, 0)
+})
+
+test('big blind gets preflop option after small blind calls heads-up', () => {
+  const state = createHandState({
+    tableId: 'bb-option',
+    handNumber: 1,
+    seed: 'bb-option-seed',
+    players: [
+      { wallet: 'dealer', seatIndex: 0, stack: 1000n },
+      { wallet: 'bb', seatIndex: 1, stack: 1000n },
+    ],
+    dealerSeat: 0,
+    smallBlind: 10n,
+    bigBlind: 20n,
+    rakeConfig,
+  })
+
+  const afterCall = applyPokerAction(state, 'dealer', 'call')
+  assert.equal(afterCall.street, 'preflop')
+  assert.equal(afterCall.currentTurnSeat, 1)
+  const afterCheck = applyPokerAction(afterCall, 'bb', 'check')
+  assert.equal(afterCheck.street, 'flop')
+  assert.equal(afterCheck.communityCards.length, 3)
+})
+
+test('out-of-turn actions are rejected', () => {
+  const state = createHandState({
+    tableId: 'turn-test',
+    handNumber: 1,
+    seed: 'turn-test-seed',
+    players: [
+      { wallet: 'a', seatIndex: 0, stack: 1000n },
+      { wallet: 'b', seatIndex: 1, stack: 1000n },
+    ],
+    dealerSeat: 0,
+    smallBlind: 10n,
+    bigBlind: 20n,
+    rakeConfig,
+  })
+
+  assert.throws(() => applyPokerAction(state, 'b', 'check'), /out of turn/)
+})
+
+test('all-in heads-up deals remaining board and goes to showdown', () => {
+  const state = createHandState({
+    tableId: 'all-in',
+    handNumber: 1,
+    seed: 'all-in-seed',
+    players: [
+      { wallet: 'a', seatIndex: 0, stack: 100n },
+      { wallet: 'b', seatIndex: 1, stack: 100n },
+    ],
+    dealerSeat: 0,
+    smallBlind: 10n,
+    bigBlind: 20n,
+    rakeConfig,
+  })
+
+  const aAllIn = applyPokerAction(state, 'a', 'allin')
+  const bAllIn = applyPokerAction(aAllIn, 'b', 'allin')
+  assert.equal(bAllIn.street, 'showdown')
+  assert.equal(bAllIn.communityCards.length, 5)
 })

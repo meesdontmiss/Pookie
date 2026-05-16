@@ -21,6 +21,8 @@ import {
   stateHash,
   type HandState,
 } from '../poker-engine'
+import { createPokerPersistence, type PokerPersistence } from './persistence'
+import { createCustodyLedger, type CustodyLedger } from './custody-ledger'
 
 type TablePlayerRuntime = {
   wallet: string
@@ -91,18 +93,24 @@ const DEFAULT_PUBLIC_TABLES: PokerTableConfig[] = [
 export class PookiePokerTableManager {
   private tables = new Map<string, TableRuntime>()
   private locks = new Map<string, Promise<void>>()
+  private persistence: PokerPersistence
+  private custodyLedger: CustodyLedger
 
-  constructor(seedDefaults = true) {
+  constructor(seedDefaults = true, persistence = createPokerPersistence(), custodyLedger = createCustodyLedger()) {
+    this.persistence = persistence
+    this.custodyLedger = custodyLedger
     if (seedDefaults) {
       for (const config of DEFAULT_PUBLIC_TABLES) {
-        this.tables.set(config.tableId, {
+        const runtime: TableRuntime = {
           config,
           status: 'waiting',
           players: new Map(),
           handNumber: 0,
           dealerSeat: 0,
           receipts: [],
-        })
+        }
+        this.tables.set(config.tableId, runtime)
+        this.persistTable(runtime)
       }
     }
   }
@@ -126,6 +134,11 @@ export class PookiePokerTableManager {
       receipts: [],
     }
     this.tables.set(config.tableId, runtime)
+    this.persistTable(runtime)
+    this.recordAudit(config.creatorWallet ?? 'system', 'create_table', 'poker_table', config.tableId, {
+      tableType: config.tableType,
+      realMoneyEnabled: false,
+    })
     return { tableId: config.tableId, inviteCode }
   }
 
@@ -164,6 +177,8 @@ export class PookiePokerTableManager {
       readyForHand: existing?.readyForHand ?? false,
       lastSeenAt: Date.now(),
     })
+    this.persistTable(table)
+    this.persistPlayer(table, wallet)
     return this.viewFor(tableId, wallet)
   }
 
@@ -174,6 +189,8 @@ export class PookiePokerTableManager {
       player.connected = false
       player.readyForHand = false
       player.lastSeenAt = Date.now()
+      this.persistDisconnected(tableId, wallet)
+      this.persistTable(table)
     }
   }
 
@@ -190,6 +207,11 @@ export class PookiePokerTableManager {
     player.seatIndex = seatIndex
     player.stack = buyInLamports
     player.readyForHand = false
+    if (table.config.realMoneyEnabled) {
+      this.moveLedgerPlayerToTable(wallet, tableId, buyInLamports, table.config.currency, `buyin:${tableId}:${wallet}:${Date.now()}`)
+    }
+    this.persistTable(table)
+    this.persistPlayer(table, wallet)
     return this.viewFor(tableId, wallet)
   }
 
@@ -202,6 +224,8 @@ export class PookiePokerTableManager {
     }
     player.seatIndex = undefined
     player.readyForHand = false
+    this.persistTable(table)
+    this.persistPlayer(table, wallet)
     return this.viewFor(tableId, wallet)
   }
 
@@ -211,6 +235,8 @@ export class PookiePokerTableManager {
     if (!player?.seatIndex && player?.seatIndex !== 0) throw new Error('Sit before readying')
     player.readyForHand = true
     if (!table.hand) this.maybeStartHand(table)
+    this.persistTable(table)
+    this.persistPlayer(table, wallet)
     return this.viewFor(tableId, wallet)
   }
 
@@ -222,6 +248,8 @@ export class PookiePokerTableManager {
     if (table.hand.street === 'showdown') {
       this.settleHand(table)
     }
+    this.persistTable(table)
+    this.persistPlayer(table, wallet)
     return this.viewFor(tableId, wallet)
   }
 
@@ -299,7 +327,7 @@ export class PookiePokerTableManager {
     }
 
     hand.settled = true
-    table.receipts.push({
+    const receipt = {
       tableId: table.config.tableId,
       handNumber: hand.handNumber,
       deckCommitment: table.deckCommitment ?? '',
@@ -311,11 +339,31 @@ export class PookiePokerTableManager {
       rakeTakenLamports: result.rake.toString(),
       completedAt: new Date().toISOString(),
       disputed: false,
-    })
+    }
+    table.receipts.push(receipt)
+
+    const tableSnapshot = this.toPublicState(table)
+    const settlements = result.payouts.map((settlement) => ({
+      ...settlement,
+      finalStack: table.players.get(settlement.wallet)?.stack ?? 0n,
+    }))
+    for (const settlement of settlements) {
+      if (settlement.won > 0n && table.config.realMoneyEnabled) {
+        this.moveLedgerTableToPlayer(
+          settlement.wallet,
+          table.config.tableId,
+          settlement.won,
+          table.config.currency,
+          `hand:${table.config.tableId}:${hand.handNumber}`,
+        )
+      }
+    }
+    this.persistSettledHand(tableSnapshot, receipt, hand.actionLog, settlements)
 
     table.hand = undefined
     table.status = 'waiting'
     table.dealerSeat = nextDealerSeat(table)
+    this.persistTable(table)
   }
 
   private syncStacksFromHand(table: TableRuntime) {
@@ -404,6 +452,57 @@ export class PookiePokerTableManager {
     }
     return actions
   }
+
+  private persistTable(table: TableRuntime) {
+    void this.persistence.upsertTable(this.toPublicState(table)).catch((error) => {
+      console.error('[pookie-poker] failed to persist table', error)
+    })
+  }
+
+  private persistPlayer(table: TableRuntime, wallet: string) {
+    const publicPlayer = this.toPublicState(table).players.find((player) => player.wallet === wallet)
+    if (!publicPlayer) return
+    void this.persistence.upsertPlayer(table.config.tableId, publicPlayer).catch((error) => {
+      console.error('[pookie-poker] failed to persist player', error)
+    })
+  }
+
+  private persistDisconnected(tableId: string, wallet: string) {
+    void this.persistence.markPlayerDisconnected(tableId, wallet).catch((error) => {
+      console.error('[pookie-poker] failed to mark disconnected player', error)
+    })
+  }
+
+  private persistSettledHand(
+    table: TablePublicState,
+    receipt: HandReceipt,
+    actions: Parameters<PokerPersistence['recordSettledHand']>[0]['actions'],
+    settlements: Parameters<PokerPersistence['recordSettledHand']>[0]['settlements'],
+  ) {
+    void this.persistence.recordSettledHand({ table, receipt, actions, settlements }).catch((error) => {
+      console.error('[pookie-poker] failed to persist settled hand', error)
+    })
+  }
+
+  private recordAudit(actor: string, action: string, targetType: string, targetId: string, metadata?: Record<string, unknown>) {
+    void this.persistence.recordAudit(actor, action, targetType, targetId, metadata).catch((error) => {
+      console.error('[pookie-poker] failed to persist audit log', error)
+    })
+  }
+
+  private moveLedgerPlayerToTable(wallet: string, tableId: string, amountLamports: bigint, mint: string, referenceId: string) {
+    if (!this.custodyLedger.enabled) return
+    void this.custodyLedger.movePlayerToTable({ wallet, tableId, amountLamports, mint, referenceId }).catch((error) => {
+      console.error('[pookie-poker] failed to move player ledger funds to table', error)
+    })
+  }
+
+  private moveLedgerTableToPlayer(wallet: string, tableId: string, amountLamports: bigint, mint: string, referenceId: string) {
+    if (!this.custodyLedger.enabled) return
+    void this.custodyLedger.settleTableToPlayer({ wallet, tableId, amountLamports, mint, referenceId }).catch((error) => {
+      console.error('[pookie-poker] failed to move table ledger funds to player', error)
+    })
+  }
 }
 
 function shortWallet(wallet: string) {
@@ -426,4 +525,3 @@ function nextDealerSeat(table: TableRuntime) {
   if (seats.length === 0) return 0
   return seats.find((seat) => seat > table.dealerSeat) ?? seats[0]
 }
-
