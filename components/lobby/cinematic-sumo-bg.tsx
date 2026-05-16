@@ -10,7 +10,7 @@ import { ASSET_PATHS } from '@/components/plug-penguin/utils/constants'
 import * as THREE from 'three'
 
 // Preload models
-useGLTF.preload(ASSET_PATHS.MODELS.GAME_PENGUIN)
+useGLTF.preload(ASSET_PATHS.MODELS.PENGUIN)
 useGLTF.preload('/models/pookie_blimp.glb')
 
 const platformRadius = 20

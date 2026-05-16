@@ -13,7 +13,7 @@ import MobileControls from './MobileControls';
 import { ASSET_PATHS } from '../../utils/constants';
 
 // Preload the Pookie model
-useGLTF.preload(ASSET_PATHS.MODELS.GAME_PENGUIN);
+useGLTF.preload(ASSET_PATHS.MODELS.PENGUIN);
 useGLTF.preload('/models/pookie_blimp.glb'); // Preload the Pookie Blimp model
 
 // Keyboard control mapping - changed to enum
@@ -130,7 +130,7 @@ const Player = React.memo(React.forwardRef<any, PlayerProps>((
   { ballColor, socket, isSpectatingOrEliminated, onFallenOff, username, initialPosition, initialYawAngle, onPushAction, platformHeightActual, mobileInputRef }, 
   ref // This ref will be attached to the RigidBody
 ) => {
-  const { scene: pookieScene } = useGLTF(ASSET_PATHS.MODELS.GAME_PENGUIN);
+  const { scene: pookieScene } = useGLTF(ASSET_PATHS.MODELS.PENGUIN);
   const { camera } = useThree(); // Get camera for initial setup
   const initialCameraSetupDone = useRef(false); // Ensure one-time setup
   // Reverted to original simpler useState initialization
@@ -482,7 +482,7 @@ const OtherPlayer: React.FC<OtherPlayerProps> = React.memo(({
   visible,
 }) => {
   const rigidBodyRef = useRef<any>();
-  const { scene: pookieScene } = useGLTF(ASSET_PATHS.MODELS.GAME_PENGUIN);
+  const { scene: pookieScene } = useGLTF(ASSET_PATHS.MODELS.PENGUIN);
 
   const playerRadius = 0.7;
   const pookieModelScale = 0.25;
@@ -621,7 +621,7 @@ const PracticeCpuPlayer: React.FC<PracticeCpuPlayerProps> = React.memo(({
   active,
 }) => {
   const rigidBodyRef = useRef<any>();
-  const { scene: pookieScene } = useGLTF(ASSET_PATHS.MODELS.GAME_PENGUIN);
+  const { scene: pookieScene } = useGLTF(ASSET_PATHS.MODELS.PENGUIN);
   const playerRadius = 0.7;
   const pookieModelScale = 0.25;
   const pookieModelPositionOffset = new THREE.Vector3(0, -playerRadius * 0.65, 0);

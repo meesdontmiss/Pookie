@@ -24,7 +24,7 @@ export const PookieInBallEffect = ({
   const ballMaterialRef = useRef<THREE.MeshPhysicalMaterial>(null);
   const colorSideMaterialRef = useRef<THREE.MeshPhysicalMaterial>(null);
 
-  const { scene: pookieModel } = useGLTF(ASSET_PATHS.MODELS.GAME_PENGUIN);
+  const { scene: pookieModel } = useGLTF(ASSET_PATHS.MODELS.PENGUIN);
 
   useEffect(() => {
     if (pookieModel && pookieModelRef.current) {

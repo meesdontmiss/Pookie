@@ -8,7 +8,7 @@ export default function PreloadPookieOnIdle() {
     const preload = async () => {
       try {
         const mod = await import('@react-three/drei')
-        mod.useGLTF.preload(ASSET_PATHS.MODELS.GAME_PENGUIN)
+        mod.useGLTF.preload(ASSET_PATHS.MODELS.PENGUIN)
       } catch {}
     }
     if (typeof window !== 'undefined') {

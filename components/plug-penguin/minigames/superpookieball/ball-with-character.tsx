@@ -32,8 +32,7 @@ export const BallWithCharacter: React.FC<BallWithCharacterProps> = ({
   const [collisionCount, setCollisionCount] = useState(0);
   const [isCollecting, setIsCollecting] = useState(false);
   
-  // Use the lightweight runtime penguin; the high-detail Pookie is reserved for showcase views.
-  const { scene: pookieModel } = useGLTF(ASSET_PATHS.MODELS.GAME_PENGUIN);
+  const { scene: pookieModel } = useGLTF(ASSET_PATHS.MODELS.PENGUIN);
   
   // Clone the model to avoid issues
   const clonedPookie = useMemo(() => pookieModel.clone(), [pookieModel]);

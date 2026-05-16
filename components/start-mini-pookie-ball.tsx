@@ -7,7 +7,7 @@ import { MiniPookieBallOptimized } from '@/components/mini-pookie-ball-optimized
 import { ASSET_PATHS } from '@/components/plug-penguin/utils/constants'
 
 // Preload the model as early as possible
-useGLTF.preload(ASSET_PATHS.MODELS.GAME_PENGUIN)
+useGLTF.preload(ASSET_PATHS.MODELS.PENGUIN)
 
 export default function StartMiniPookieBall() {
   return (
@@ -49,4 +49,3 @@ export default function StartMiniPookieBall() {
     </div>
   )
 }
-

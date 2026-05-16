@@ -20,7 +20,7 @@ export const MiniPookieBallOptimized = ({
   const ballRef = useRef<THREE.Group>(null);
   const pookieModelRef = useRef<THREE.Group>(null);
 
-  const { scene: pookieModel } = useGLTF(ASSET_PATHS.MODELS.GAME_PENGUIN);
+  const { scene: pookieModel } = useGLTF(ASSET_PATHS.MODELS.PENGUIN);
 
   useEffect(() => {
     if (pookieModel && pookieModelRef.current) {
