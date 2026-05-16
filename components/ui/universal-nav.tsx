@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 // import { MusicPlayer } from '../audio/music-player'; // Temporarily commented out due to path issues
-import { Twitter, Home, Copy, Check, ExternalLink, ImageIcon } from 'lucide-react' // Assuming Twitter icon is used directly
+import { Twitter, Home, Copy, Check, ExternalLink } from 'lucide-react' // Assuming Twitter icon is used directly
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui' // Temporarily comment out
 // Removed other lucide-react icons if they were only for MusicPlayer or NetworkStatus
 import { useEffect, useState } from 'react' // Import useEffect and useState
@@ -77,7 +77,12 @@ export default function UniversalNav() {
                 className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-white/10 text-white hover:bg-white/20 border border-white/20 hover:border-cyan-400/50 backdrop-blur-md transition-all duration-200"
                 title="Open POOKIE NFT collection on Magic Eden"
               >
-                <ImageIcon size={14} />
+                <img
+                  src="/images/magic-eden-logo.svg"
+                  alt=""
+                  aria-hidden="true"
+                  className="h-4 w-4 rounded-[4px]"
+                />
                 <span>NFTs</span>
                 <ExternalLink size={12} className="text-white/60" />
               </a>

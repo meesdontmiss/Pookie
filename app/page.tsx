@@ -4,7 +4,7 @@ import type { CSSProperties } from "react"
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
-import { Check, Copy, ExternalLink } from "lucide-react"
+import { Check, Copy } from "lucide-react"
 import styles from "./HomeHero.module.css"
 import StartSnow from "@/components/start-snow"
 import StartDock from "@/components/ui/start-dock"
@@ -233,8 +233,8 @@ export default function Home() {
               rel="noopener noreferrer"
               aria-label="Open POOKIE NFT collection on Magic Eden"
             >
-              <span className={styles.tokenCopyIcon}>
-                <ExternalLink size={18} />
+              <span className={`${styles.tokenCopyIcon} ${styles.magicEdenIcon}`}>
+                <img src="/images/magic-eden-logo.svg" alt="" aria-hidden="true" />
               </span>
               <span className={styles.tokenCopyText}>
                 <span className={styles.tokenCopyLabel}>NFT Collection</span>

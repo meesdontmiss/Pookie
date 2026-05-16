@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Magic Eden</title>
+  <rect width="512" height="512" rx="64" fill="#E4257A"/>
+  <path
+    fill="#F8F7FA"
+    d="M91 169c0-14 11-25 25-25h10c7 0 13 3 18 8l51 52 51-52c5-5 11-8 18-8h146c15 0 27 12 27 27s-12 27-27 27h-80l30 36c9 11 9 26 0 37l-31 43h82c15 0 27 12 27 27s-12 27-27 27H275c-11 0-20-6-25-15s-4-21 2-29l52-70-35-42-52 70c-5 7-13 12-22 12s-17-4-23-10l-51-52v111c0 15-12 27-27 27s-27-12-27-27V169z"
+  />
+</svg>

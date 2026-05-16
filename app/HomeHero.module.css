@@ -230,6 +230,18 @@
     0 8px 18px rgba(2, 6, 23, 0.28);
 }
 
+.magicEdenIcon {
+  overflow: hidden;
+  background: #e4257a;
+}
+
+.magicEdenIcon img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
 .tokenCopyText {
   display: grid;
   gap: 3px;
