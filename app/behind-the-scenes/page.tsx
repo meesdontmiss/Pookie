@@ -6,7 +6,6 @@ import { POOKIE_MAGIC_EDEN_URL, POOKIE_TOKEN_ADDRESS } from "@/lib/pookie-links"
 const WIX = "/website/wix"
 
 const socialLinks = [
-  { href: "https://www.dextools.io/app/en/solana/pair-explorer/GfbcpEhUcrMHJ2vqwbsVEAWVFR5owwAD8mRrKhUzpump", src: `${WIX}/dextools.png`, alt: "Dextools" },
   { href: "https://dexscreener.com/solana/gfbcpEhUcrMHJ2vqwbsVEAWVFR5owwAD8mRrKhUzpump", src: `${WIX}/dexscreener.png`, alt: "Dexscreener" },
   { href: "https://t.me/pookiethepeng", src: `${WIX}/telegram.png`, alt: "Telegram" },
   { href: POOKIE_MAGIC_EDEN_URL, src: `${WIX}/magiceden.png`, alt: "Magic Eden" },
