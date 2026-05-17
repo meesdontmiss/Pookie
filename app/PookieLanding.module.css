@@ -188,32 +188,6 @@
   object-fit: contain;
 }
 
-.contractButton {
-  gap: 1px;
-  border-radius: 999px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.1)),
-    rgba(107, 114, 128, 0.74);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.38),
-    0 7px 14px rgba(0, 0, 0, 0.2);
-}
-
-.contractButton span {
-  font-family: Arial, Helvetica, sans-serif;
-  font-size: 10px;
-  font-weight: 950;
-  line-height: 1;
-  letter-spacing: 0;
-}
-
-.contractButtonCopied {
-  color: #143004;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.46), rgba(190, 242, 100, 0.22)),
-    rgba(132, 204, 22, 0.78);
-}
-
 .dock {
   bottom: 28px;
 }
@@ -376,14 +350,6 @@
     width: 38px;
     height: 38px;
     border-radius: 8px;
-  }
-
-  .contractButton {
-    border-radius: 999px;
-  }
-
-  .contractButton span {
-    font-size: 8px;
   }
 
   .dock {

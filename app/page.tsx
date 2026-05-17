@@ -3,11 +3,10 @@
 import type { CSSProperties } from "react"
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Check, Copy } from "lucide-react"
 import landingStyles from "./PookieLanding.module.css"
 import StartMiniPookieBallLoader from "@/components/start-mini-pookie-ball-loader"
 import StartDock from "@/components/ui/start-dock"
-import { POOKIE_DEXSCREENER_URL, POOKIE_MAGIC_EDEN_URL, POOKIE_TOKEN_ADDRESS } from "@/lib/pookie-links"
+import { POOKIE_DEXSCREENER_URL, POOKIE_MAGIC_EDEN_URL } from "@/lib/pookie-links"
 
 const WIX = "/website/wix"
 const BEHIND_THE_SCENES_DOCK_IMAGE_STYLE: CSSProperties = { borderRadius: "16px", objectFit: "cover" }
@@ -39,7 +38,6 @@ const topLinks = [
 
 export default function Home() {
   const router = useRouter()
-  const [hasCopiedToken, setHasCopiedToken] = useState(false)
   const [isNavigating, setIsNavigating] = useState(false)
   const [isFlyVisible, setIsFlyVisible] = useState(true)
   const [flyCycle, setFlyCycle] = useState(0)
@@ -69,29 +67,6 @@ export default function Home() {
     },
     [isNavigating, router],
   )
-
-  const handleCopyTokenAddress = useCallback(async () => {
-    setHasCopiedToken(true)
-    window.setTimeout(() => setHasCopiedToken(false), 1800)
-
-    try {
-      await navigator.clipboard.writeText(POOKIE_TOKEN_ADDRESS)
-    } catch {
-      const textarea = document.createElement("textarea")
-      textarea.value = POOKIE_TOKEN_ADDRESS
-      textarea.setAttribute("readonly", "")
-      textarea.style.position = "fixed"
-      textarea.style.opacity = "0"
-      document.body.appendChild(textarea)
-      textarea.select()
-
-      try {
-        document.execCommand("copy")
-      } finally {
-        document.body.removeChild(textarea)
-      }
-    }
-  }, [])
 
   return (
     <main className={landingStyles.page} aria-label="Pookie landing page">
@@ -124,18 +99,6 @@ export default function Home() {
         </div>
 
         <nav className={landingStyles.topLinks} aria-label="Pookie links">
-          <button
-            type="button"
-            className={`${landingStyles.topLinkButton} ${landingStyles.contractButton} ${
-              hasCopiedToken ? landingStyles.contractButtonCopied : ""
-            }`}
-            onClick={handleCopyTokenAddress}
-            aria-label="Click to copy POOKIE token address"
-            title="Click to copy POOKIE token address"
-          >
-            {hasCopiedToken ? <Check size={22} aria-hidden="true" /> : <Copy size={22} aria-hidden="true" />}
-            <span>{hasCopiedToken ? "OK" : "CA"}</span>
-          </button>
           {topLinks.map((link) => (
             <a
               key={link.alt}
