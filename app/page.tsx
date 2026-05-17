@@ -6,12 +6,34 @@ import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { Check, Copy } from "lucide-react"
 import landingStyles from "./PookieLanding.module.css"
-import widgetStyles from "./HomeHero.module.css"
 import StartDock from "@/components/ui/start-dock"
 import { POOKIE_DEXSCREENER_URL, POOKIE_MAGIC_EDEN_URL, POOKIE_TOKEN_ADDRESS } from "@/lib/pookie-links"
 
 const WIX = "/website/wix"
 const BEHIND_THE_SCENES_DOCK_IMAGE_STYLE: CSSProperties = { borderRadius: "16px", objectFit: "cover" }
+
+const topLinks = [
+  {
+    href: POOKIE_DEXSCREENER_URL,
+    src: `${WIX}/dexscreener.png`,
+    alt: "Dexscreener",
+  },
+  {
+    href: "https://t.me/pookiethepeng",
+    src: `${WIX}/telegram.png`,
+    alt: "Telegram",
+  },
+  {
+    href: POOKIE_MAGIC_EDEN_URL,
+    src: `${WIX}/magiceden.png`,
+    alt: "Magic Eden",
+  },
+  {
+    href: "https://twitter.com/PookieThePeng",
+    src: `${WIX}/x-logo.webp`,
+    alt: "X",
+  },
+]
 
 const StartMiniPookieBall = dynamic(() => import("@/components/start-mini-pookie-ball"), {
   ssr: false,
@@ -78,38 +100,33 @@ export default function Home() {
           <img src={`${WIX}/pookster-fly.gif`} alt="" className={landingStyles.flyPookie} />
         </div>
 
-        <div className={landingStyles.widgetBar}>
+        <nav className={landingStyles.topLinks} aria-label="Pookie links">
           <button
             type="button"
-            className={`${widgetStyles.tokenCopyButton} ${hasCopiedToken ? widgetStyles.tokenCopyButtonCopied : ""}`}
+            className={`${landingStyles.topLinkButton} ${landingStyles.contractButton} ${
+              hasCopiedToken ? landingStyles.contractButtonCopied : ""
+            }`}
             onClick={handleCopyTokenAddress}
             aria-label="Click to copy POOKIE token address"
             title="Click to copy POOKIE token address"
           >
-            <span className={widgetStyles.tokenCopyIcon}>
-              {hasCopiedToken ? <Check size={18} /> : <Copy size={18} />}
-            </span>
-            <span className={widgetStyles.tokenCopyText}>
-              <span className={widgetStyles.tokenCopyLabel}>{hasCopiedToken ? "Copied!" : "Copy token address"}</span>
-              <span className={widgetStyles.tokenCopyAddress}>{POOKIE_TOKEN_ADDRESS}</span>
-            </span>
+            {hasCopiedToken ? <Check size={22} aria-hidden="true" /> : <Copy size={22} aria-hidden="true" />}
+            <span>{hasCopiedToken ? "OK" : "CA"}</span>
           </button>
-          <a
-            className={widgetStyles.magicEdenButton}
-            href={POOKIE_MAGIC_EDEN_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Open POOKIE NFT collection on Magic Eden"
-          >
-            <span className={`${widgetStyles.tokenCopyIcon} ${widgetStyles.magicEdenIcon}`}>
-              <img src="/images/magic-eden-logo.svg" alt="" aria-hidden="true" />
-            </span>
-            <span className={widgetStyles.tokenCopyText}>
-              <span className={widgetStyles.tokenCopyLabel}>NFT Collection</span>
-              <span className={widgetStyles.tokenCopyAddress}>Magic Eden / POOKIE</span>
-            </span>
-          </a>
-        </div>
+          {topLinks.map((link) => (
+            <a
+              key={link.alt}
+              className={landingStyles.topLinkButton}
+              href={link.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={link.alt}
+              title={link.alt}
+            >
+              <img src={link.src} alt="" aria-hidden="true" />
+            </a>
+          ))}
+        </nav>
 
         {!isNavigating && (
           <StartDock
