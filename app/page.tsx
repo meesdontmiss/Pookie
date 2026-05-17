@@ -1,7 +1,7 @@
 "use client"
 
 import type { CSSProperties } from "react"
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { Check, Copy } from "lucide-react"
@@ -11,6 +11,8 @@ import { POOKIE_DEXSCREENER_URL, POOKIE_MAGIC_EDEN_URL, POOKIE_TOKEN_ADDRESS } f
 
 const WIX = "/website/wix"
 const BEHIND_THE_SCENES_DOCK_IMAGE_STYLE: CSSProperties = { borderRadius: "16px", objectFit: "cover" }
+const FLY_VISIBLE_MS = 3800
+const FLY_PAUSE_MS = 7500
 
 const topLinks = [
   {
@@ -44,6 +46,25 @@ export default function Home() {
   const router = useRouter()
   const [hasCopiedToken, setHasCopiedToken] = useState(false)
   const [isNavigating, setIsNavigating] = useState(false)
+  const [isFlyVisible, setIsFlyVisible] = useState(true)
+  const [flyCycle, setFlyCycle] = useState(0)
+
+  useEffect(() => {
+    const timeout = window.setTimeout(
+      () => {
+        if (isFlyVisible) {
+          setIsFlyVisible(false)
+          return
+        }
+
+        setFlyCycle((cycle) => cycle + 1)
+        setIsFlyVisible(true)
+      },
+      isFlyVisible ? FLY_VISIBLE_MS : FLY_PAUSE_MS,
+    )
+
+    return () => window.clearTimeout(timeout)
+  }, [isFlyVisible])
 
   const handleNavigate = useCallback(
     (destination: string) => {
@@ -92,12 +113,19 @@ export default function Home() {
           <img src={`${WIX}/pookie-spin.gif`} alt="" className={landingStyles.sidePookieRight} />
           <img src={`${WIX}/pookie-pink-rpg.gif`} alt="" className={landingStyles.pinkPookie} />
           <img src={`${WIX}/pookie-green-sword.gif`} alt="" className={landingStyles.swordPookie} />
-          <img src={`${WIX}/gold-rpg.gif`} alt="" className={landingStyles.goldRpg} />
           <img src={`${WIX}/title-text.gif`} alt="Pookie" className={landingStyles.titleText} />
           <img src={`${WIX}/plastic-penguin-text.gif`} alt="The Plastic Penguin" className={landingStyles.subtitleText} />
           <img src={`${WIX}/flamethrower.gif`} alt="" className={landingStyles.flameLeft} />
           <img src={`${WIX}/flamethrower.gif`} alt="" className={landingStyles.flameRight} />
-          <img src={`${WIX}/pookster-fly.gif`} alt="" className={landingStyles.flyPookie} />
+          {isFlyVisible && (
+            <img
+              key={flyCycle}
+              src={`${WIX}/pookster-fly.gif`}
+              alt=""
+              className={landingStyles.flyPookie}
+              loading="eager"
+            />
+          )}
         </div>
 
         <nav className={landingStyles.topLinks} aria-label="Pookie links">

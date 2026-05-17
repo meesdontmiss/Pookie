@@ -100,12 +100,6 @@
   width: clamp(160px, 12.8vw, 244px);
 }
 
-.goldRpg {
-  top: clamp(110px, 14vh, 170px);
-  left: clamp(270px, 34vw, 650px);
-  width: clamp(50px, 4vw, 78px);
-}
-
 .titleText {
   top: clamp(-18px, 1vh, 12px);
   left: 50%;
@@ -280,10 +274,6 @@
     top: 78px;
     right: 7vw;
     width: 150px;
-  }
-
-  .goldRpg {
-    display: none;
   }
 
   .titleText {
