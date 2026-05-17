@@ -176,6 +176,7 @@ export default function GameHubStart() {
           {/* Mac-style Dock with hover magnification */}
           {!isNavigating && (
             <StartDock
+              className={styles.gameDock}
               items={[
                 {
                   key: 'pookie-sumo-ball',

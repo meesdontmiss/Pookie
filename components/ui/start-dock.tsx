@@ -114,7 +114,7 @@ export default function StartDock({ items, className }: { items: DockItem[]; cla
           return (
             <button
               key={item.key}
-              title={item.title}
+              aria-label={item.title || item.key}
               className={styles.dockItem}
               onClick={item.onClick}
               onMouseDown={() => playSound('down')}
@@ -140,6 +140,11 @@ export default function StartDock({ items, className }: { items: DockItem[]; cla
                   style={item.imageStyle}
                 />
               ) : null}
+              {item.title ? (
+                <span className={styles.dockHoverLabel} aria-hidden="true">
+                  {item.title}
+                </span>
+              ) : null}
             </button>
           )
         })}
@@ -147,4 +152,3 @@ export default function StartDock({ items, className }: { items: DockItem[]; cla
     </div>
   )
 }
-
