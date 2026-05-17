@@ -12,7 +12,7 @@ export interface DockItem {
   imageStyle?: React.CSSProperties
 }
 
-export default function StartDock({ items }: { items: DockItem[] }) {
+export default function StartDock({ items, className }: { items: DockItem[]; className?: string }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([])
   const [mouseX, setMouseX] = useState<number | null>(null)
@@ -100,7 +100,7 @@ export default function StartDock({ items }: { items: DockItem[] }) {
   }
 
   return (
-    <div className={styles.dock}>
+    <div className={`${styles.dock} ${className ?? ""}`}>
       <div
         ref={containerRef}
         className={styles.dockInner}
@@ -147,5 +147,4 @@ export default function StartDock({ items }: { items: DockItem[] }) {
     </div>
   )
 }
-
 

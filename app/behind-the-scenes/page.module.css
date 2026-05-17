@@ -1,240 +1,476 @@
 .page {
   min-height: 100vh;
-  padding: 96px 24px 64px;
-  color: #f8fafc;
-  background:
-    radial-gradient(circle at 18% 8%, rgba(34, 211, 238, 0.2), transparent 30%),
-    radial-gradient(circle at 82% 18%, rgba(132, 204, 22, 0.16), transparent 28%),
-    linear-gradient(180deg, #07111f 0%, #020617 100%);
+  overflow-x: hidden;
+  color: #050505;
+  background-color: #f3f4ed;
+  background-image: url("/website/notebook-paper-texture.jpg");
+  background-size: 1944px 1296px;
+  background-position: center top;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
 }
 
 .hero {
-  display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(360px, 1.1fr);
-  align-items: center;
-  gap: 32px;
-  width: min(1180px, 100%);
+  position: relative;
+}
+
+.headerBand {
+  position: relative;
+  height: 162px;
+  background: linear-gradient(90deg, #67ad4d 0 24.3%, #168a41 24.3% 75.7%, #67ad4d 75.7% 100%);
+}
+
+.flagLeft,
+.flagRight {
+  position: absolute;
+  top: 36px;
+  width: 125px;
+  height: 125px;
+}
+
+.flagLeft {
+  left: clamp(180px, 26vw, 500px);
+}
+
+.flagRight {
+  right: clamp(180px, 26vw, 500px);
+}
+
+.headerCrown {
+  position: absolute;
+  top: -22px;
+  left: 50%;
+  width: 520px;
+  height: auto;
+  transform: translateX(-50%);
+}
+
+.collage {
+  position: relative;
+  width: min(1920px, 100vw);
+  height: clamp(650px, 39.4vw, 760px);
   margin: 0 auto;
 }
 
-.heroCopy {
-  display: grid;
-  gap: 18px;
+.collage img {
+  position: absolute;
+  display: block;
+  height: auto;
+  user-select: none;
 }
 
-.kicker {
-  margin: 0;
-  color: #67e8f9;
-  font-size: 13px;
-  font-weight: 900;
-  letter-spacing: 0.16em;
+.sidePookieLeft,
+.sidePookieRight {
+  top: 155px;
+  width: clamp(360px, 29vw, 560px);
+}
+
+.sidePookieLeft {
+  left: clamp(-150px, -7vw, -70px);
+}
+
+.sidePookieRight {
+  right: clamp(-150px, -7vw, -70px);
+  transform: scaleX(-1);
+}
+
+.pinkPookie {
+  top: 62px;
+  left: clamp(220px, 24.4vw, 468px);
+  width: clamp(185px, 13.2vw, 252px);
+}
+
+.swordPookie {
+  top: 72px;
+  right: clamp(220px, 28vw, 530px);
+  width: clamp(185px, 12.8vw, 244px);
+}
+
+.goldRpg {
+  top: 170px;
+  left: clamp(318px, 34vw, 650px);
+  width: clamp(56px, 4vw, 78px);
+}
+
+.titleText {
+  top: 30px;
+  left: 50%;
+  width: clamp(430px, 34vw, 650px);
+  transform: translateX(-50%);
+  mix-blend-mode: multiply;
+}
+
+.subtitleText {
+  top: 242px;
+  left: 50%;
+  width: clamp(360px, 28vw, 540px);
+  transform: translateX(-50%);
+  mix-blend-mode: multiply;
+}
+
+.flameLeft,
+.flameRight {
+  top: 455px;
+  width: clamp(170px, 11.5vw, 220px);
+}
+
+.flameLeft {
+  left: clamp(260px, 19.5vw, 380px);
+}
+
+.flameRight {
+  right: clamp(260px, 19.5vw, 380px);
+  transform: scaleX(-1);
+}
+
+.socials {
+  position: absolute;
+  top: 590px;
+  left: 50%;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  transform: translateX(-50%);
+}
+
+.socials a {
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+}
+
+.socials img {
+  position: static;
+  max-width: 60px;
+  max-height: 60px;
+  object-fit: contain;
+}
+
+.howTo {
+  width: min(600px, calc(100% - 28px));
+  margin: 20px auto 12px;
+}
+
+.howTo img,
+.program > img:first-child,
+.proof img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.origin {
+  position: relative;
+  width: min(980px, calc(100% - 32px));
+  min-height: 170px;
+  margin: 0 auto 22px;
+}
+
+.originSpin {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  width: 120px;
+  transform: translateX(-50%);
+}
+
+.originSword {
+  position: absolute;
+  top: 34px;
+  left: calc(50% + 70px);
+  width: 88px;
+}
+
+.contract {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  gap: 8px;
+  width: min(340px, 100%);
+  padding: 14px;
+  border: 3px dashed #168a41;
+  background: rgba(255, 251, 148, 0.78);
+}
+
+.contract span {
+  color: #168a41;
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
-.hero h1 {
-  margin: 0;
-  max-width: 9ch;
-  font-size: clamp(56px, 8vw, 104px);
-  line-height: 0.88;
-  font-weight: 950;
+.contract code {
+  overflow-wrap: anywhere;
+  color: #050505;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
 }
 
-.lede {
-  margin: 0;
-  max-width: 640px;
-  color: rgba(226, 232, 240, 0.84);
-  font-size: clamp(18px, 2vw, 23px);
-  line-height: 1.45;
+.proof {
+  width: min(980px, calc(100% - 32px));
+  margin: 0 auto;
+}
+
+.proofGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+  margin-top: 18px;
+}
+
+.proofStack {
+  display: grid;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.proofGrid img:first-child {
+  grid-column: 1 / -1;
+}
+
+.proof p {
+  margin: 18px 0 6px;
+  color: #050505;
+  font-size: clamp(18px, 2vw, 22px);
+  font-weight: 900;
+  line-height: 1.22;
+}
+
+.program {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  width: 100%;
+  margin: 28px auto 0;
+  padding-bottom: 130px;
+  overflow: hidden;
+}
+
+.program > img:first-child {
+  width: min(600px, calc(100% - 28px));
+}
+
+.flyPookie {
+  position: absolute;
+  left: 50%;
+  bottom: 42px;
+  width: 100vw;
+  max-width: none;
+  pointer-events: none;
+  transform: translateX(-50%);
 }
 
 .actions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 12px;
-  align-items: center;
+  width: min(980px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 0 0 80px;
 }
 
-.primaryAction,
-.secondaryAction {
+.actions a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-height: 44px;
+  min-height: 42px;
   padding: 0 16px;
-  border-radius: 10px;
+  border: 3px solid #050505;
+  border-radius: 5px;
+  color: #050505;
+  background: #ffdc1d;
   font-size: 14px;
-  font-weight: 900;
-  text-decoration: none;
-  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
-}
-
-.primaryAction {
-  color: #042f2e;
-  background: linear-gradient(135deg, #67e8f9, #bef264);
-}
-
-.secondaryAction {
-  color: #f8fafc;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.primaryAction:hover,
-.secondaryAction:hover {
-  transform: translateY(-2px);
-}
-
-.heroImage {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
-  object-position: center;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
-}
-
-.story {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
-  gap: 24px;
-  width: min(1180px, 100%);
-  margin: 56px auto 0;
-  align-items: start;
-}
-
-.storyText {
-  display: grid;
-  gap: 14px;
-}
-
-.storyText h2 {
-  margin: 0;
-  font-size: clamp(28px, 4vw, 48px);
-}
-
-.storyText p {
-  margin: 0;
-  max-width: 820px;
-  color: rgba(226, 232, 240, 0.82);
-  font-size: 17px;
-  line-height: 1.65;
-}
-
-.contractPanel {
-  display: grid;
-  gap: 10px;
-  padding: 18px;
-  border-radius: 8px;
-  border: 1px solid rgba(103, 232, 249, 0.22);
-  background: rgba(15, 23, 42, 0.64);
-}
-
-.contractPanel span {
-  color: #67e8f9;
-  font-size: 12px;
-  font-weight: 900;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.contractPanel code {
-  overflow-wrap: anywhere;
-  color: rgba(248, 250, 252, 0.88);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.timeline {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
-  width: min(1180px, 100%);
-  margin: 44px auto 0;
-}
-
-.timelineCard {
-  position: relative;
-  overflow: hidden;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(15, 23, 42, 0.72);
-}
-
-.timelineCard:first-child {
-  grid-column: 1 / -1;
-}
-
-.timelineIndex {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  z-index: 2;
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  color: #04111f;
-  background: #67e8f9;
-  font-size: 13px;
   font-weight: 950;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+  text-decoration: none;
+  box-shadow: 4px 5px 0 rgba(0, 0, 0, 0.22);
 }
 
-.timelineImage {
-  display: block;
-  width: 100%;
-  aspect-ratio: 16 / 7;
-  object-fit: cover;
-  object-position: center;
-  background: #020617;
+.actions a:first-child {
+  background: #ffffff;
 }
 
-.timelineCard:not(:first-child) .timelineImage {
-  aspect-ratio: 16 / 10;
-}
-
-.timelineBody {
-  display: grid;
-  gap: 8px;
-  padding: 18px;
-}
-
-.timelineBody h2 {
-  margin: 0;
-  font-size: 22px;
-}
-
-.timelineBody p {
-  margin: 0;
-  color: rgba(226, 232, 240, 0.78);
-  font-size: 15px;
-  line-height: 1.55;
-}
-
-@media (max-width: 820px) {
-  .page {
-    padding: 84px 16px 48px;
+@media (max-width: 900px) {
+  .headerBand {
+    height: 118px;
+    padding-inline: 42px;
   }
 
-  .hero,
-  .story,
-  .timeline {
+  .flagLeft,
+  .flagRight {
+    width: 92px;
+    height: 92px;
+    transform: translateY(32px);
+  }
+
+  .headerCrown {
+    width: 100px;
+  }
+
+  .collage {
+    height: 610px;
+  }
+
+  .sidePookieLeft,
+  .sidePookieRight {
+    top: 240px;
+    width: 150px;
+  }
+
+  .pinkPookie {
+    top: 82px;
+    left: 8vw;
+    width: 150px;
+  }
+
+  .swordPookie {
+    top: 88px;
+    right: 8vw;
+    width: 150px;
+  }
+
+  .goldRpg {
+    display: none;
+  }
+
+  .titleText {
+    top: 98px;
+    width: min(520px, 78vw);
+  }
+
+  .subtitleText {
+    top: 430px;
+    width: min(420px, 72vw);
+  }
+
+  .flameLeft {
+    left: 22vw;
+  }
+
+  .flameRight {
+    right: 22vw;
+  }
+
+  .socials {
+    top: 540px;
+    gap: 12px;
+  }
+
+  .proofGrid {
     grid-template-columns: 1fr;
   }
 
-  .hero h1 {
-    max-width: 10ch;
+  .contract {
+    position: relative;
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 560px) {
+  .headerBand {
+    height: 86px;
+    padding-inline: 22px;
   }
 
-  .timelineCard:first-child {
-    grid-column: auto;
+  .flagLeft,
+  .flagRight {
+    width: 66px;
+    height: 66px;
+    transform: translateY(24px);
   }
 
-  .timelineImage,
-  .timelineCard:not(:first-child) .timelineImage {
-    aspect-ratio: 4 / 3;
+  .headerCrown {
+    width: 74px;
+  }
+
+  .collage {
+    height: 500px;
+  }
+
+  .sidePookieLeft,
+  .sidePookieRight {
+    top: 230px;
+    width: 110px;
+  }
+
+  .pinkPookie,
+  .swordPookie {
+    top: 52px;
+    width: 118px;
+  }
+
+  .titleText {
+    top: 192px;
+    width: 92vw;
+  }
+
+  .subtitleText {
+    top: 350px;
+    width: 80vw;
+  }
+
+  .flameLeft,
+  .flameRight {
+    top: 320px;
+    width: 92px;
+  }
+
+  .flameLeft {
+    left: 20vw;
+  }
+
+  .flameRight {
+    right: 20vw;
+  }
+
+  .socials {
+    top: 438px;
+    gap: 8px;
+  }
+
+  .socials a {
+    width: 42px;
+    height: 42px;
+  }
+
+  .socials img {
+    max-width: 42px;
+    max-height: 42px;
+  }
+
+  .origin {
+    min-height: 260px;
+  }
+
+  .originSpin {
+    left: 26%;
+  }
+
+  .originSword {
+    left: 52%;
+  }
+
+  .contract {
+    top: 150px;
+    right: auto;
+  }
+
+  .flyPookie {
+    bottom: 56px;
   }
 }

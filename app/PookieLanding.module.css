@@ -1,0 +1,321 @@
+.page {
+  position: relative;
+  height: calc(100vh - 4rem);
+  height: calc(100dvh - 4rem);
+  overflow: hidden;
+  color: #050505;
+  background-color: #f3f4ed;
+  background-image: url("/website/notebook-paper-texture.jpg");
+  background-size: 1944px 1296px;
+  background-position: center top;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.hero {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.headerBand {
+  position: relative;
+  z-index: 4;
+  height: clamp(96px, 18vh, 162px);
+  background: linear-gradient(90deg, #67ad4d 0 24.3%, #168a41 24.3% 75.7%, #67ad4d 75.7% 100%);
+}
+
+.flagLeft,
+.flagRight {
+  position: absolute;
+  top: clamp(18px, 4vh, 36px);
+  width: clamp(74px, 6.6vw, 125px);
+  height: clamp(74px, 6.6vw, 125px);
+}
+
+.flagLeft {
+  left: clamp(120px, 28vw, 535px);
+}
+
+.flagRight {
+  right: clamp(120px, 28vw, 535px);
+}
+
+.headerCrown {
+  position: absolute;
+  top: clamp(-34px, -2.5vh, -12px);
+  left: 50%;
+  width: clamp(300px, 27vw, 520px);
+  height: auto;
+  transform: translateX(-50%);
+}
+
+.collage {
+  position: relative;
+  z-index: 1;
+  width: min(1920px, 100vw);
+  height: calc(100% - clamp(96px, 18vh, 162px));
+  margin: 0 auto;
+}
+
+.collage img {
+  position: absolute;
+  display: block;
+  height: auto;
+  user-select: none;
+}
+
+.sidePookieLeft,
+.sidePookieRight {
+  top: clamp(165px, 19vh, 230px);
+  width: clamp(260px, 29vw, 560px);
+}
+
+.sidePookieLeft {
+  left: clamp(-150px, -7vw, -70px);
+}
+
+.sidePookieRight {
+  right: clamp(-150px, -7vw, -70px);
+  transform: scaleX(-1);
+}
+
+.pinkPookie {
+  top: clamp(44px, 8vh, 70px);
+  left: clamp(180px, 24.4vw, 468px);
+  width: clamp(160px, 13.2vw, 252px);
+}
+
+.swordPookie {
+  top: clamp(52px, 8.8vh, 78px);
+  right: clamp(190px, 28vw, 530px);
+  width: clamp(160px, 12.8vw, 244px);
+}
+
+.goldRpg {
+  top: clamp(110px, 14vh, 170px);
+  left: clamp(270px, 34vw, 650px);
+  width: clamp(50px, 4vw, 78px);
+}
+
+.titleText {
+  top: clamp(-18px, 1vh, 12px);
+  left: 50%;
+  width: clamp(430px, 34vw, 650px);
+  mix-blend-mode: multiply;
+  transform: translateX(-50%);
+}
+
+.subtitleText {
+  top: clamp(170px, 25vh, 210px);
+  left: 50%;
+  width: clamp(360px, 28vw, 540px);
+  mix-blend-mode: multiply;
+  transform: translateX(-50%);
+}
+
+.flameLeft,
+.flameRight {
+  top: clamp(405px, 50vh, 480px);
+  width: clamp(132px, 11.5vw, 220px);
+}
+
+.flameLeft {
+  left: clamp(190px, 19.5vw, 380px);
+}
+
+.flameRight {
+  right: clamp(190px, 19.5vw, 380px);
+  transform: scaleX(-1);
+}
+
+.flyPookie {
+  top: 0;
+  left: 0;
+  z-index: 6;
+  width: 100vw;
+  max-width: none;
+  pointer-events: none;
+}
+
+.widgetBar {
+  position: absolute;
+  top: calc(clamp(96px, 18vh, 162px) + 28px);
+  left: 50%;
+  bottom: auto;
+  z-index: 170;
+  display: flex;
+  width: min(920px, calc(100vw - 36px));
+  justify-content: center;
+  gap: 12px;
+  transform: translateX(-50%);
+}
+
+.dock {
+  bottom: 28px;
+}
+
+@media (max-width: 900px) {
+  .page {
+    height: auto;
+    min-height: calc(100vh - 4rem);
+    min-height: calc(100dvh - 4rem);
+    overflow-y: auto;
+  }
+
+  .hero {
+    min-height: 900px;
+  }
+
+  .headerBand {
+    height: 108px;
+  }
+
+  .flagLeft {
+    left: 32px;
+  }
+
+  .flagRight {
+    right: 32px;
+  }
+
+  .headerCrown {
+    width: 320px;
+  }
+
+  .collage {
+    height: 610px;
+  }
+
+  .sidePookieLeft,
+  .sidePookieRight {
+    top: 250px;
+    width: 160px;
+  }
+
+  .sidePookieLeft {
+    left: 18px;
+  }
+
+  .sidePookieRight {
+    right: 18px;
+  }
+
+  .pinkPookie {
+    top: 70px;
+    left: 7vw;
+    width: 150px;
+  }
+
+  .swordPookie {
+    top: 78px;
+    right: 7vw;
+    width: 150px;
+  }
+
+  .goldRpg {
+    display: none;
+  }
+
+  .titleText {
+    top: 104px;
+    width: min(520px, 78vw);
+  }
+
+  .subtitleText {
+    top: 430px;
+    width: min(420px, 72vw);
+  }
+
+  .flameLeft {
+    left: 18vw;
+  }
+
+  .flameRight {
+    right: 18vw;
+  }
+
+  .widgetBar {
+    bottom: 118px;
+    flex-direction: column;
+    align-items: stretch;
+    width: min(420px, calc(100vw - 28px));
+  }
+}
+
+@media (max-width: 560px) {
+  .hero {
+    min-height: 840px;
+  }
+
+  .headerBand {
+    height: 86px;
+  }
+
+  .flagLeft,
+  .flagRight {
+    top: 22px;
+    width: 66px;
+    height: 66px;
+  }
+
+  .headerCrown {
+    width: 240px;
+  }
+
+  .collage {
+    height: 520px;
+  }
+
+  .sidePookieLeft,
+  .sidePookieRight {
+    top: 240px;
+    width: 118px;
+  }
+
+  .pinkPookie,
+  .swordPookie {
+    top: 52px;
+    width: 118px;
+  }
+
+  .titleText {
+    top: 184px;
+    width: 92vw;
+  }
+
+  .subtitleText {
+    top: 344px;
+    width: 80vw;
+  }
+
+  .flameLeft,
+  .flameRight {
+    top: 312px;
+    width: 92px;
+  }
+
+  .flameLeft {
+    left: 18vw;
+  }
+
+  .flameRight {
+    right: 18vw;
+  }
+
+  .widgetBar {
+    bottom: 150px;
+  }
+
+  .dock {
+    margin-top: 26px;
+  }
+}

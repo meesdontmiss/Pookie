@@ -1,108 +1,117 @@
 import Link from "next/link"
-import { ExternalLink } from "lucide-react"
+import { BodyScrollReset } from "./body-scroll-reset"
 import styles from "./page.module.css"
 import { POOKIE_MAGIC_EDEN_URL, POOKIE_TOKEN_ADDRESS } from "@/lib/pookie-links"
 
-const historyImages = [
+const WIX = "/website/wix"
+
+const socialLinks = [
+  { href: "https://www.dextools.io/app/en/solana/pair-explorer/GfbcpEhUcrMHJ2vqwbsVEAWVFR5owwAD8mRrKhUzpump", src: `${WIX}/dextools.png`, alt: "Dextools" },
+  { href: "https://dexscreener.com/solana/gfbcpEhUcrMHJ2vqwbsVEAWVFR5owwAD8mRrKhUzpump", src: `${WIX}/dexscreener.png`, alt: "Dexscreener" },
+  { href: "https://t.me/pookiethepeng", src: `${WIX}/telegram.png`, alt: "Telegram" },
+  { href: POOKIE_MAGIC_EDEN_URL, src: `${WIX}/magiceden.png`, alt: "Magic Eden" },
+  { href: "https://twitter.com/PookieThePeng", src: `${WIX}/x-logo.webp`, alt: "X" },
+]
+
+const proofImages = [
   {
-    src: "/images/pookie-history/blender-original-model.png",
-    alt: "Pookie original Blender model",
-    title: "Modeled From Scratch",
-    copy: "Pookie started in Blender in 2024, built completely from imagination as the first plastic penguin.",
+    src: `${WIX}/screenshot-blender-wide.png`,
+    alt: "Pookie Blender and After Effects production screenshot",
+  },
+]
+
+const launchProofImages = [
+  {
+    src: `${WIX}/mint out and bonding.png`,
+    alt: "Pookie mint out and bonding proof",
   },
   {
-    src: "/images/pookie-history/after-effects-mixed-media.png",
-    alt: "After Effects mixed media NFT production",
-    title: "Animated, Then Remixed",
-    copy: "The Blender walk cycle moved into After Effects, where mixed media assets were pinned to Pookie's hands and head so they followed his motion.",
-  },
-  {
-    src: "/images/pookie-history/magic-eden-collection-launch.png",
-    alt: "POOKIE Magic Eden collection launch page",
-    title: "Free Mint Collection",
-    copy: "The POOKIE NFT collection launched as a completely free mint and sold out in 12 hours.",
-  },
-  {
-    src: "/images/pookie-history/magic-eden-sold-out-wide.png",
-    alt: "POOKIE Magic Eden collection sold out",
-    title: "2222 Sold Out",
-    copy: "All 2,222 plastic penguins found homes, turning the original Blender experiment into a real community artifact.",
-  },
-  {
-    src: "/images/pookie-history/pumpfun-bonding-candles.png",
-    alt: "POOKIE token pumpfun bonding chart",
-    title: "Token Launch",
-    copy: "When the token launched, POOKIE bonded on pump.fun in about four minutes flat, with no real pre-planning.",
+    src: `${WIX}/Screenshot 2024-07-31 191348.png`,
+    alt: "Pookie launch proof screenshot",
   },
 ]
 
 export default function BehindTheScenesPage() {
   return (
     <main className={styles.page}>
-      <section className={styles.hero}>
-        <div className={styles.heroCopy}>
-          <p className={styles.kicker}>Behind The Scenes</p>
-          <h1>How Pookie Came To Be</h1>
-          <p className={styles.lede}>
-            Pookie began as a scratch-made Blender character in 2024, became a mixed media NFT
-            collection through After Effects, then turned into a fast-moving token launch.
-          </p>
-          <div className={styles.actions}>
-            <Link href="/" className={styles.secondaryAction}>
-              Back home
-            </Link>
-            <a
-              href={POOKIE_MAGIC_EDEN_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={styles.primaryAction}
-            >
-              View NFTs <ExternalLink size={16} />
-            </a>
-          </div>
+      <BodyScrollReset />
+
+      <section className={styles.hero} aria-label="Pookie original website collage">
+        <div className={styles.headerBand} aria-hidden="true">
+          <img src={`${WIX}/pookie-flag-left.png`} alt="" className={styles.flagLeft} />
+          <img src={`${WIX}/partyhat.gif`} alt="" className={styles.headerCrown} />
+          <img src={`${WIX}/pookie-flag-right.png`} alt="" className={styles.flagRight} />
         </div>
-        <img
-          src="/images/pookie-history/blender-original-model.png"
-          alt="Pookie in Blender"
-          className={styles.heroImage}
-        />
+
+        <div className={styles.collage}>
+          <h1 className={styles.srOnly}>Pookie The Plastic Penguin</h1>
+          <img src={`${WIX}/pookie-spin.gif`} alt="" className={styles.sidePookieLeft} />
+          <img src={`${WIX}/pookie-spin.gif`} alt="" className={styles.sidePookieRight} />
+          <img src={`${WIX}/pookie-pink-rpg.gif`} alt="" className={styles.pinkPookie} />
+          <img src={`${WIX}/pookie-green-sword.gif`} alt="" className={styles.swordPookie} />
+          <img src={`${WIX}/gold-rpg.gif`} alt="" className={styles.goldRpg} />
+          <img src={`${WIX}/title-text.gif`} alt="Pookie" className={styles.titleText} />
+          <img src={`${WIX}/plastic-penguin-text.gif`} alt="The Plastic Penguin" className={styles.subtitleText} />
+          <img src={`${WIX}/flamethrower.gif`} alt="" className={styles.flameLeft} />
+          <img src={`${WIX}/flamethrower.gif`} alt="" className={styles.flameRight} />
+
+          <nav className={styles.socials} aria-label="Pookie links">
+            {socialLinks.map((link) => (
+              <a key={link.alt} href={link.href} target="_blank" rel="noopener noreferrer">
+                <img src={link.src} alt={link.alt} />
+              </a>
+            ))}
+          </nav>
+        </div>
       </section>
 
-      <section className={styles.story}>
-        <div className={styles.storyText}>
-          <h2>The Process</h2>
-          <p>
-            First, Pookie was modeled completely from scratch in Blender. After that, the animated
-            Blender walk cycle was recorded and brought into After Effects.
-          </p>
-          <p>
-            The NFT collection used a mixed media workflow: assets were pinned to Pookie's hands
-            and head so every trait followed the movement. The collection was a free mint and sold
-            out in 12 hours.
-          </p>
-          <p>
-            The token launch moved fast too. POOKIE bonded on pump.fun in about four minutes flat,
-            an independent launch with almost no pre-planning.
-          </p>
-        </div>
-        <div className={styles.contractPanel}>
+      <section className={styles.howTo}>
+        <img src={`${WIX}/how-to-pook.png`} alt="How to Pook" />
+      </section>
+
+      <section className={styles.origin}>
+        <img src={`${WIX}/pookie-spin.gif`} alt="" className={styles.originSpin} />
+        <img src="/images/8bitlazersword.gif" alt="" className={styles.originSword} />
+        <div className={styles.contract}>
           <span>Token Contract</span>
           <code>{POOKIE_TOKEN_ADDRESS}</code>
         </div>
       </section>
 
-      <section className={styles.timeline} aria-label="Pookie creation timeline">
-        {historyImages.map((item, index) => (
-          <article key={item.src} className={styles.timelineCard}>
-            <div className={styles.timelineIndex}>{String(index + 1).padStart(2, "0")}</div>
-            <img src={item.src} alt={item.alt} className={styles.timelineImage} loading="lazy" />
-            <div className={styles.timelineBody}>
-              <h2>{item.title}</h2>
-              <p>{item.copy}</p>
-            </div>
-          </article>
-        ))}
+      <section className={styles.proof}>
+        <div className={styles.proofGrid}>
+          {proofImages.slice(0, 3).map((image) => (
+            <img key={image.src} src={image.src} alt={image.alt} />
+          ))}
+        </div>
+        <p>
+          Pookie was made using a combination of Blender & Adobe After Effects. To generate a
+          collection of png GIF files I had to create my own generator with the assistance of
+          Chat-GPT. After weeks of trouble shooting, the Pookies were born! A degen mint launched
+          off of LaunchMyNFT with less than 24 hrs notice. The collection sold out in 2 hrs.
+        </p>
+        <div className={styles.proofStack}>
+          {launchProofImages.map((image) => (
+            <img key={image.src} src={image.src} alt={image.alt} />
+          ))}
+        </div>
+        <p>
+          $pookie launched the day after mint and broke the bondage curve on pump.fun in 5 minutes.
+          Still waiting to hear if that's a record..
+        </p>
       </section>
+
+      <section className={styles.program}>
+        <img src={`${WIX}/three-step-program.png`} alt="Pookie three step program" />
+        <img src={`${WIX}/pookster-fly.gif`} alt="" className={styles.flyPookie} />
+      </section>
+
+      <div className={styles.actions}>
+        <Link href="/">Back home</Link>
+        <a href={POOKIE_MAGIC_EDEN_URL} target="_blank" rel="noopener noreferrer">
+          View NFTs
+        </a>
+      </div>
     </main>
   )
 }
