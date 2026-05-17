@@ -3,17 +3,15 @@
 import type { CSSProperties } from "react"
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Check, Copy } from "lucide-react"
+import { Home } from "lucide-react"
 import styles from "@/app/HomeHero.module.css"
 import StartSnow from "@/components/start-snow"
 import StartDock from "@/components/ui/start-dock"
 import StartMiniPookieBallLoader from "@/components/start-mini-pookie-ball-loader"
 import PreloadPookieOnIdle from "@/components/preload-pookie-on-idle"
-import { POOKIE_DEXSCREENER_URL, POOKIE_MAGIC_EDEN_URL, POOKIE_TOKEN_ADDRESS } from "@/lib/pookie-links"
 
 const STAGE_WIDTH = 1920
 const STAGE_HEIGHT = 1080
-const BEHIND_THE_SCENES_DOCK_IMAGE_STYLE: CSSProperties = { borderRadius: "16px", objectFit: "cover" }
 
 function PookiePokerDockIcon() {
   const cardBase: CSSProperties = {
@@ -82,18 +80,9 @@ function PookiePokerDockIcon() {
 export default function GameHubStart() {
   const router = useRouter()
 
-  const [isLoading, setIsLoading] = useState(false)
-  const [loadError, setLoadError] = useState(false)
-  const [loadTimeout, setLoadTimeout] = useState(false)
-  const [showClickHint, setShowClickHint] = useState(false)
   const [isNavigating, setIsNavigating] = useState(false)
   const [stageScale, setStageScale] = useState(1)
   const [isMobile, setIsMobile] = useState(false)
-  const [hasCopiedToken, setHasCopiedToken] = useState(false)
-
-  useEffect(() => {
-        setShowClickHint(true)
-  }, [])
 
   useEffect(() => {
     const updateScale = () => {
@@ -118,42 +107,12 @@ export default function GameHubStart() {
     return () => window.removeEventListener('resize', updateScale)
   }, [])
 
-  const handleLoadComplete = () => {}
-  const handleLoadError = () => {}
-
   const handleNavigate = useCallback((destination: string) => {
-    if (isLoading || isNavigating) return
+    if (isNavigating) return
 
     setIsNavigating(true)
     router.push(destination)
-  }, [isLoading, isNavigating, router])
-
-  const handleCopyTokenAddress = useCallback(async () => {
-    setHasCopiedToken(true)
-    window.setTimeout(() => setHasCopiedToken(false), 1800)
-
-    try {
-      await navigator.clipboard.writeText(POOKIE_TOKEN_ADDRESS)
-    } catch (error) {
-      const textarea = document.createElement("textarea")
-      textarea.value = POOKIE_TOKEN_ADDRESS
-      textarea.setAttribute("readonly", "")
-      textarea.style.position = "fixed"
-      textarea.style.opacity = "0"
-      document.body.appendChild(textarea)
-      textarea.select()
-
-      try {
-        document.execCommand("copy")
-      } catch (fallbackError) {
-        console.error("Could not copy token address:", fallbackError)
-      } finally {
-        document.body.removeChild(textarea)
-      }
-    }
-  }, [])
-
-  const handlePookieClick = () => handleNavigate('/plug-penguin')
+  }, [isNavigating, router])
 
   return (
     <>
@@ -163,6 +122,17 @@ export default function GameHubStart() {
         <div className={isMobile ? styles.mobileWrapper : styles.stageWrapper} style={{ transform: `scale(${stageScale})` }}>
           <main className={isMobile ? styles.mobileContent : styles.stageContent}>
             <PreloadPookieOnIdle />
+
+          <button
+            type="button"
+            className={styles.homeButton}
+            onClick={() => handleNavigate('/')}
+            aria-label="Back to Pookie home"
+            title="Back to Pookie home"
+          >
+            <Home size={20} aria-hidden="true" />
+            <span>Home</span>
+          </button>
 
           <div className={styles.heroOverlay}>
             <div className={styles.heroRow}>
@@ -202,41 +172,6 @@ export default function GameHubStart() {
               loading="eager"
             />
           </div>
-
-          <div className={styles.heroLinkWrap}>
-            <button
-              type="button"
-              className={`${styles.tokenCopyButton} ${hasCopiedToken ? styles.tokenCopyButtonCopied : ""}`}
-              onClick={handleCopyTokenAddress}
-              aria-label="Click to copy POOKIE token address"
-              title="Click to copy POOKIE token address"
-            >
-              <span className={styles.tokenCopyIcon}>
-                {hasCopiedToken ? <Check size={18} /> : <Copy size={18} />}
-              </span>
-              <span className={styles.tokenCopyText}>
-                <span className={styles.tokenCopyLabel}>
-                  {hasCopiedToken ? "Copied!" : "Click to copy token address"}
-                </span>
-                <span className={styles.tokenCopyAddress}>{POOKIE_TOKEN_ADDRESS}</span>
-              </span>
-            </button>
-            <a
-              className={styles.magicEdenButton}
-              href={POOKIE_MAGIC_EDEN_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Open POOKIE NFT collection on Magic Eden"
-            >
-              <span className={`${styles.tokenCopyIcon} ${styles.magicEdenIcon}`}>
-                <img src="/images/magic-eden-logo.svg" alt="" aria-hidden="true" />
-              </span>
-              <span className={styles.tokenCopyText}>
-                <span className={styles.tokenCopyLabel}>NFT Collection</span>
-                <span className={styles.tokenCopyAddress}>Magic Eden / POOKIE</span>
-              </span>
-            </a>
-          </div>
           
           {/* Mac-style Dock with hover magnification */}
           {!isNavigating && (
@@ -254,61 +189,10 @@ export default function GameHubStart() {
                   onClick: () => handleNavigate('/pookie-poker'),
                   render: <PookiePokerDockIcon />,
                 },
-                {
-                  key: 'social-hub',
-                  title: 'Social Hub',
-                  onClick: () => handleNavigate('/plug-penguin'),
-                  imageSrc: '/images/pookies-smokin-shootin-dice-png.png',
-                },
-                {
-                  key: 'behind-the-scenes',
-                  title: 'Behind The Scenes',
-                  onClick: () => handleNavigate('/behind-the-scenes'),
-                  imageSrc: '/images/pookie-history/blender-original-model.png',
-                  imageStyle: BEHIND_THE_SCENES_DOCK_IMAGE_STYLE,
-                },
-                {
-                  key: 'gallery',
-                  title: 'Gallery',
-                  onClick: () => handleNavigate('/gallery'),
-                  imageSrc: '/images/jeet-me.png',
-                },
-                {
-                  key: 'pookhub',
-                  title: 'PookHub',
-                  onClick: () => {
-                    if (typeof window !== 'undefined') {
-                      window.open('https://www.pornhub.com/model/pookiethepeng', '_blank', 'noopener,noreferrer')
-                    }
-                  },
-                  imageSrc: '/images/pookie-smashin.gif',
-                },
-                {
-                  key: 'dexscreener',
-                  title: 'Dexscreener',
-                  onClick: () => {
-                    if (typeof window !== 'undefined') {
-                      window.open(POOKIE_DEXSCREENER_URL, '_blank', 'noopener,noreferrer')
-                    }
-                  },
-                  imageSrc: '/images/POOKIE DOLLAR.jpg',
-                },
               ]}
             />
           )}
 
-            {isLoading && !loadError && !loadTimeout && (
-              <div className={styles.loadingText}>
-                Loading Plug Penguin...
-              </div>
-            )}
-
-            {(loadError || loadTimeout) && (
-            <div className={styles.warning}>
-              <p className={styles.warningLine}>Experience the full magic on a desktop browser!</p>
-              <p className={styles.warningLine}>This game doesn't work on mobile devices yet.</p>
-              </div>
-            )}
           </main>
         </div>
       </div>
