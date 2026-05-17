@@ -121,7 +121,9 @@ export default function StartDock({ items, className }: { items: DockItem[]; cla
               onMouseUp={() => playSound('up')}
               onTouchStart={() => playSound('down')}
               onTouchEnd={() => playSound('up')}
-              ref={(el) => (itemRefs.current[idx] = el)}
+              ref={(el) => {
+                itemRefs.current[idx] = el
+              }}
               style={{
                 transform: `translateY(${-lift}px) scale(${scale})`,
                 filter: `drop-shadow(0 10px 22px rgba(0,0,0,${shadowStrength}))`,
