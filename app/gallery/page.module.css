@@ -190,18 +190,19 @@
 }
 
 .gallery {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: clamp(20px, 2.5vw, 34px);
+  columns: 4 235px;
+  column-gap: clamp(20px, 2.5vw, 34px);
   width: min(1220px, 100%);
   margin: 0 auto;
   padding-bottom: 24px;
-  align-items: start;
 }
 
 .galleryItem {
   position: relative;
-  grid-column: span 3;
+  display: inline-block;
+  width: 100%;
+  margin: 0 0 clamp(22px, 2.7vw, 36px);
+  break-inside: avoid;
   overflow: visible;
   transition:
     filter 170ms ease,
@@ -217,34 +218,22 @@
   transform: translateY(-5px) rotate(0.4deg);
 }
 
-.featured {
-  grid-column: span 6;
-}
-
 .imageFrame {
   position: relative;
   width: 100%;
-  aspect-ratio: 1 / 1;
   background: transparent;
-}
-
-.featured .imageFrame {
-  aspect-ratio: 16 / 9;
 }
 
 .imageFrame img,
 .imageFrame video {
   display: block;
   width: 100%;
-  height: 100%;
-  object-fit: contain;
-  object-position: center;
+  height: auto;
   filter: drop-shadow(0 10px 10px rgba(0, 0, 0, 0.12));
 }
 
-.contain .imageFrame img,
-.contain .imageFrame video {
-  object-fit: contain;
+.imageFrame video {
+  background: rgba(255, 255, 255, 0.22);
 }
 
 .itemMeta {
@@ -270,6 +259,52 @@
   line-height: 1.05;
 }
 
+.downloadButton {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 2px solid #050505;
+  border-radius: 999px;
+  color: #050505;
+  background: rgba(163, 255, 67, 0.92);
+  font-size: 11px;
+  font-weight: 950;
+  line-height: 1;
+  text-decoration: none;
+  text-transform: uppercase;
+  box-shadow: 0 5px 0 #050505;
+  transform: translateY(0);
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.downloadButton:hover,
+.downloadButton:focus-visible {
+  background: #22d3ee;
+  box-shadow: 0 7px 0 #050505;
+  transform: translateY(-2px);
+}
+
+.gallerySentinel {
+  width: min(1220px, 100%);
+  margin: 10px auto 0;
+  color: #168a41;
+  font-size: 14px;
+  font-weight: 950;
+  text-align: center;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
 @media (max-width: 1080px) {
   .hero {
     grid-template-columns: 1fr;
@@ -278,14 +313,6 @@
 
   .modelStage {
     height: 460px;
-  }
-
-  .galleryItem {
-    grid-column: span 4;
-  }
-
-  .featured {
-    grid-column: span 8;
   }
 }
 
@@ -308,13 +335,10 @@
     height: 420px;
   }
 
-  .gallery {
-    gap: 14px;
-  }
-
-  .galleryItem,
-  .featured {
-    grid-column: span 6;
+  .downloadButton {
+    min-height: 32px;
+    padding: 0 9px;
+    font-size: 10px;
   }
 }
 
@@ -331,8 +355,7 @@
     height: 340px;
   }
 
-  .galleryItem,
-  .featured {
-    grid-column: 1 / -1;
+  .gallery {
+    columns: 1;
   }
 }
