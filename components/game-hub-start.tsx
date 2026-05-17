@@ -3,11 +3,11 @@
 import type { CSSProperties } from "react"
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import dynamic from "next/dynamic"
 import { Check, Copy } from "lucide-react"
 import styles from "@/app/HomeHero.module.css"
 import StartSnow from "@/components/start-snow"
 import StartDock from "@/components/ui/start-dock"
+import StartMiniPookieBallLoader from "@/components/start-mini-pookie-ball-loader"
 import PreloadPookieOnIdle from "@/components/preload-pookie-on-idle"
 import { POOKIE_DEXSCREENER_URL, POOKIE_MAGIC_EDEN_URL, POOKIE_TOKEN_ADDRESS } from "@/lib/pookie-links"
 
@@ -78,11 +78,6 @@ function PookiePokerDockIcon() {
     </div>
   )
 }
-
-const StartMiniPookieBall = dynamic(() => import("@/components/start-mini-pookie-ball"), { 
-  ssr: false,
-  loading: () => <div style={{ width: '100%', height: '100%', background: 'transparent' }} />
-})
 
 export default function GameHubStart() {
   const router = useRouter()
@@ -251,7 +246,7 @@ export default function GameHubStart() {
                   key: 'pookie-sumo-ball',
                   title: 'Pookie Sumo Ball',
                   onClick: () => handleNavigate('/pookiesumoroyale/lobby-browser'),
-                  render: <StartMiniPookieBall />,
+                  render: <StartMiniPookieBallLoader />,
                 },
                 {
                   key: 'pookie-poker',

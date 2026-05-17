@@ -2,10 +2,10 @@
 
 import type { CSSProperties } from "react"
 import { useCallback, useEffect, useState } from "react"
-import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { Check, Copy } from "lucide-react"
 import landingStyles from "./PookieLanding.module.css"
+import StartMiniPookieBallLoader from "@/components/start-mini-pookie-ball-loader"
 import StartDock from "@/components/ui/start-dock"
 import { POOKIE_DEXSCREENER_URL, POOKIE_MAGIC_EDEN_URL, POOKIE_TOKEN_ADDRESS } from "@/lib/pookie-links"
 
@@ -36,11 +36,6 @@ const topLinks = [
     alt: "X",
   },
 ]
-
-const StartMiniPookieBall = dynamic(() => import("@/components/start-mini-pookie-ball"), {
-  ssr: false,
-  loading: () => <div style={{ width: "100%", height: "100%", background: "transparent" }} />,
-})
 
 export default function Home() {
   const router = useRouter()
@@ -164,7 +159,7 @@ export default function Home() {
                 key: "game-hub",
                 title: "Game Hub",
                 onClick: () => handleNavigate("/gamehub"),
-                render: <StartMiniPookieBall />,
+                render: <StartMiniPookieBallLoader />,
               },
               {
                 key: "social-hub",
