@@ -10,9 +10,8 @@ import { POOKIE_DEXSCREENER_URL, POOKIE_MAGIC_EDEN_URL } from "@/lib/pookie-link
 
 const WIX = "/website/wix"
 const BEHIND_THE_SCENES_DOCK_IMAGE_STYLE: CSSProperties = { borderRadius: "16px", objectFit: "cover" }
-// Matches the full play-through of pookster-fly.gif (201 frames ≈ 8040ms) so
-// Pookie glides fully in and out of frame instead of being unmounted mid-flight.
-const FLY_VISIBLE_MS = 8040
+// Matches the full play-through of pookster-fly.gif (201 frames at 25fps).
+const FLY_PLAY_MS = 8040
 const FLY_PAUSE_MS = 7500
 
 const topLinks = [
@@ -41,25 +40,15 @@ const topLinks = [
 export default function Home() {
   const router = useRouter()
   const [isNavigating, setIsNavigating] = useState(false)
-  const [isFlyVisible, setIsFlyVisible] = useState(true)
   const [flyCycle, setFlyCycle] = useState(0)
 
   useEffect(() => {
-    const timeout = window.setTimeout(
-      () => {
-        if (isFlyVisible) {
-          setIsFlyVisible(false)
-          return
-        }
-
-        setFlyCycle((cycle) => cycle + 1)
-        setIsFlyVisible(true)
-      },
-      isFlyVisible ? FLY_VISIBLE_MS : FLY_PAUSE_MS,
-    )
+    const timeout = window.setTimeout(() => {
+      setFlyCycle((cycle) => cycle + 1)
+    }, FLY_PLAY_MS + FLY_PAUSE_MS)
 
     return () => window.clearTimeout(timeout)
-  }, [isFlyVisible])
+  }, [flyCycle])
 
   const handleNavigate = useCallback(
     (destination: string) => {
@@ -89,15 +78,13 @@ export default function Home() {
           <img src={`${WIX}/plastic-penguin-text.gif`} alt="The Plastic Penguin" className={landingStyles.subtitleText} />
           <img src={`${WIX}/flamethrower.gif`} alt="" className={landingStyles.flameLeft} />
           <img src={`${WIX}/flamethrower.gif`} alt="" className={landingStyles.flameRight} />
-          {isFlyVisible && (
-            <img
-              key={flyCycle}
-              src={`${WIX}/pookster-fly.gif`}
-              alt=""
-              className={landingStyles.flyPookie}
-              loading="eager"
-            />
-          )}
+          <img
+            key={flyCycle}
+            src={`${WIX}/pookster-fly-once.gif?run=${flyCycle}`}
+            alt=""
+            className={landingStyles.flyPookie}
+            loading="eager"
+          />
         </div>
 
         <nav className={landingStyles.topLinks} aria-label="Pookie links">
