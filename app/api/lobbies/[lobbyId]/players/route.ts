@@ -99,10 +99,11 @@ export async function POST(
     );
   }
 
-  const { walletAddress, username, wagerAmount } = body as {
+  // Note: wagerAmount is intentionally NOT read from the client — the wager is
+  // always the lobby's configured amount so a player cannot tamper with it.
+  const { walletAddress, username } = body as {
     walletAddress?: string;
     username?: string;
-    wagerAmount?: number;
   };
 
   if (!walletAddress) {
@@ -155,7 +156,7 @@ export async function POST(
           lobby_id: lobbyId,
           wallet_address: walletAddress,
           username: username?.trim() || walletAddress,
-          wager_amount: wagerAmount ?? lobby.wager_amount,
+          wager_amount: lobby.wager_amount,
         },
         { onConflict: "lobby_id,wallet_address" },
       )

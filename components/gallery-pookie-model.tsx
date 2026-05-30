@@ -10,6 +10,10 @@ type PointerTarget = {
   y: number
 }
 
+// The GLB's natural orientation is a side profile, so spin it a quarter turn
+// to rest facing the camera. Flip the sign if Pookie ends up facing away.
+const MODEL_BASE_YAW = Math.PI / 2
+
 function GalleryPookie({ pointer, onReady = () => undefined }: { pointer: PointerTarget; onReady?: () => void }) {
   const groupRef = useRef<THREE.Group>(null)
   const { scene } = useGLTF("/models/POOKIE.glb")
@@ -43,7 +47,7 @@ function GalleryPookie({ pointer, onReady = () => undefined }: { pointer: Pointe
     if (!groupRef.current) return
 
     const elapsed = clock.getElapsedTime()
-    const targetY = pointer.x * 0.62
+    const targetY = MODEL_BASE_YAW + pointer.x * 0.62
     const targetX = THREE.MathUtils.clamp(-pointer.y * 0.22, -0.18, 0.2)
     const targetZ = THREE.MathUtils.clamp(-pointer.x * 0.08, -0.08, 0.08)
     const targetXPosition = pointer.x * 0.12
@@ -56,7 +60,7 @@ function GalleryPookie({ pointer, onReady = () => undefined }: { pointer: Pointe
   })
 
   return (
-    <group ref={groupRef} scale={0.66} rotation={[0.04, -0.08, 0]}>
+    <group ref={groupRef} scale={0.66} rotation={[0.04, MODEL_BASE_YAW, 0]}>
       <Center>
         <primitive object={model} />
       </Center>
@@ -87,6 +91,8 @@ function PookieModelFallback() {
 export default function GalleryPookieModel() {
   const [pointer, setPointer] = useState<PointerTarget>({ x: 0, y: 0 })
   const [isLoaded, setIsLoaded] = useState(false)
+  const [inView, setInView] = useState(true)
+  const wrapRef = useRef<HTMLDivElement | null>(null)
   const handleModelReady = useCallback(() => setIsLoaded(true), [])
 
   useEffect(() => {
@@ -101,14 +107,27 @@ export default function GalleryPookieModel() {
     return () => window.removeEventListener("pointermove", handlePointerMove)
   }, [])
 
+  // Stop rendering the WebGL scene while it is scrolled out of view to save GPU/battery.
+  useEffect(() => {
+    const node = wrapRef.current
+    if (!node || typeof IntersectionObserver === "undefined") return
+    const observer = new IntersectionObserver(
+      (entries) => setInView(entries.some((entry) => entry.isIntersecting)),
+      { rootMargin: "120px" },
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
+
   return (
-    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+    <div ref={wrapRef} style={{ position: "relative", width: "100%", height: "100%" }}>
       {!isLoaded ? (
         <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
           <PookieModelFallback />
         </div>
       ) : null}
       <Canvas
+        frameloop={inView ? "always" : "never"}
         camera={{ position: [0, 0.85, 7.2], fov: 38 }}
         dpr={[1, 1.75]}
         gl={{ alpha: true, antialias: true, powerPreference: "high-performance" }}

@@ -1,0 +1,21 @@
+name: Typecheck (money-critical paths)
+
+# Runs the active tsconfig, which currently passes clean. This guards the
+# wager / poker / escrow / lobby code paths against type regressions without
+# blocking on the ~157 pre-existing errors in the legacy plug-penguin game code.
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck:active

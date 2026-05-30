@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
+import { safeEqual } from '@/lib/secure-compare'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,7 +23,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     const secretHeader =
       request.headers.get('x-admin-secret') || request.headers.get('X-Admin-Secret')
     const expected = getAdminSecret()
-    if (secretHeader !== expected) {
+    if (!safeEqual(secretHeader, expected)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 

@@ -3,24 +3,25 @@
  * Pattern from Cock Combat with Solana-specific implementation
  */
 
+import 'server-only'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 function getServiceEnv(): { url: string; key: string } {
-  // Support multiple env names. Prefer NEXT_* when provided.
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  // The service-role key bypasses RLS and must never reach the client bundle,
+  // so we never read a NEXT_PUBLIC_ key name here.
+  const url = process.env.SUPABASE_URL
     || process.env.NEXT_SUPABASE_URL
-    || process.env.SUPABASE_URL
+    || process.env.NEXT_PUBLIC_SUPABASE_URL
     || ''
 
-  const key = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
     || process.env.NEXT_SUPABASE_SERVICE_ROLE_KEY
-    || process.env.NEXT_SUPABASE_SERVICE_KEY
-    || process.env.SUPABASE_SERVICE_ROLE_KEY
     || process.env.SUPABASE_SERVICE_KEY
+    || process.env.NEXT_SUPABASE_SERVICE_KEY
     || ''
 
   if (!url || !key) {
-    throw new Error('Supabase service env missing (url/key). Set NEXT_PUBLIC_SUPABASE_URL and NEXT_SUPABASE_SERVICE_ROLE_KEY (or server equivalents).')
+    throw new Error('Supabase service env missing (url/key). Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (server-only, never NEXT_PUBLIC_).')
   }
   return { url, key }
 }

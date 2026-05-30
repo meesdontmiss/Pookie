@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import Image from "next/image"
 import { Check, ChevronLeft, ChevronRight, Copy, Download, X } from "lucide-react"
 import styles from "@/app/gallery/page.module.css"
 
@@ -181,7 +182,13 @@ export default function GalleryGrid({ items }: { items: GalleryItem[] }) {
             {item.media === "video" ? (
               <video src={item.src} muted loop playsInline preload="metadata" />
             ) : (
-              <img src={item.src} alt={item.alt} loading="lazy" decoding="async" />
+              <Image
+                src={item.src}
+                alt={item.alt}
+                fill
+                sizes="(max-width: 540px) 50vw, (max-width: 1220px) 25vw, 200px"
+                style={{ objectFit: "cover" }}
+              />
             )}
           </button>
         ))}

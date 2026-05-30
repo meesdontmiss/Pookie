@@ -7,6 +7,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { payoutFromEscrow } from '@/lib/payout-service'
+import { safeEqual } from '@/lib/secure-compare'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
     if (!payoutSecret) {
       return NextResponse.json({ error: 'Server not configured (missing PAYOUT_SERVER_SECRET)' }, { status: 500 })
     }
-    if (secretHeader !== payoutSecret) {
+    if (!safeEqual(secretHeader, payoutSecret)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 

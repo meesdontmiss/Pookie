@@ -15,6 +15,23 @@ const RPC_URL =
     ? `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`
     : 'https://api.mainnet-beta.solana.com')
 
+// Allowed browser origins (prevents other sites from burning the paid RPC key).
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || process.env.NEXT_PUBLIC_APP_URL || 'https://www.pookiethepeng.com')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean)
+  .concat(process.env.NODE_ENV !== 'production' ? ['http://localhost:3000', 'http://localhost:3001'] : [])
+
+// Reject oversized payloads outright (raw JSON-RPC bodies are tiny).
+const MAX_BODY_BYTES = 100 * 1024
+
+function isAllowedOrigin(request: Request): boolean {
+  const origin = request.headers.get('origin')
+  // Same-origin browser GET/POST may omit Origin; only block cross-origin mismatches.
+  if (!origin) return true
+  return ALLOWED_ORIGINS.includes(origin)
+}
+
 // Allowed JSON-RPC methods (whitelist to prevent abuse)
 const ALLOWED_METHODS = new Set([
   'getLatestBlockhash',
@@ -31,7 +48,20 @@ const ALLOWED_METHODS = new Set([
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json()
+    if (!isAllowedOrigin(request)) {
+      return NextResponse.json({ error: 'Origin not allowed' }, { status: 403 })
+    }
+
+    const contentLength = Number(request.headers.get('content-length') || '0')
+    if (contentLength > MAX_BODY_BYTES) {
+      return NextResponse.json({ error: 'Payload too large' }, { status: 413 })
+    }
+
+    const raw = await request.text()
+    if (raw.length > MAX_BODY_BYTES) {
+      return NextResponse.json({ error: 'Payload too large' }, { status: 413 })
+    }
+    const body = JSON.parse(raw)
 
     // Validate JSON-RPC method is allowed
     const method = body?.method

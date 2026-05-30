@@ -37,12 +37,12 @@ export async function fetchAccountHistory(wallet: string): Promise<AccountHistor
     throw new Error('Supabase admin env not configured')
   }
 
-  const normalized = wallet.toLowerCase()
-
+  // Solana addresses are case-sensitive base58 — never lowercase them, or the
+  // roster match here will diverge from the exact-match transactions query below.
   const { data: matchesData, error: matchesError } = await supabase
     .from('match_state')
     .select('id,lobby_id,game_mode,status,started_at,completed_at,winner_wallet,roster')
-    .contains('roster', [{ wallet: normalized }])
+    .contains('roster', [{ wallet }])
     .order('started_at', { ascending: false })
     .limit(100)
 
