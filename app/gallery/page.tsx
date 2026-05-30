@@ -2,7 +2,7 @@ import { readdir } from "fs/promises"
 import path from "path"
 import Link from "next/link"
 import { ArrowLeft, ExternalLink } from "lucide-react"
-import GalleryEndlessGrid, { type GalleryItem } from "@/components/gallery-endless-grid"
+import GalleryGrid, { type GalleryItem } from "@/components/gallery-grid"
 import GalleryPookieModel from "@/components/gallery-pookie-model"
 import { BodyScrollReset } from "../behind-the-scenes/body-scroll-reset"
 import styles from "./page.module.css"
@@ -81,35 +81,28 @@ export default async function GalleryPage() {
     <main className={styles.page}>
       <BodyScrollReset />
 
-      <section className={styles.hero} aria-label="Pookie gallery intro">
-        <div className={styles.heroCopy}>
-          <Link href="/" className={styles.backHome}>
-            <ArrowLeft size={18} aria-hidden="true" />
-            Home
-          </Link>
-          <img src="/website/wix/title-text.gif" alt="Pookie" className={styles.titleArt} />
-          <h1>Media Vault</h1>
-          <p className={styles.lede}>
-            A scrollable stash of Pookie artwork, posters, memes, drops, edits, and community chaos.
-          </p>
-          <div className={styles.actions}>
-            <a href={POOKIE_MAGIC_EDEN_URL} target="_blank" rel="noopener noreferrer" className={styles.primaryAction}>
-              View collection <ExternalLink size={16} />
-            </a>
-          </div>
-        </div>
+      <Link href="/" className={styles.backHome}>
+        <ArrowLeft size={18} aria-hidden="true" />
+        Home
+      </Link>
+      <a
+        href={POOKIE_MAGIC_EDEN_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={styles.collectionLink}
+      >
+        View collection <ExternalLink size={16} />
+      </a>
 
+      <section className={styles.splash} aria-label="Pookie">
+        <div className={styles.modelGlow} aria-hidden="true" />
         <div className={styles.modelStage} aria-label="Interactive 3D Pookie model">
-          <div className={styles.modelGlow} aria-hidden="true" />
           <GalleryPookieModel />
         </div>
+        <img src="/website/wix/title-text.gif" alt="Pookie" className={styles.titleArt} />
       </section>
 
-      <section className={styles.galleryIntro} aria-label="Gallery count">
-        <p>{galleryItems.length} gallery pieces. Scroll forever, download anything.</p>
-      </section>
-
-      <GalleryEndlessGrid items={galleryItems} />
+      <GalleryGrid items={galleryItems} />
     </main>
   )
 }
