@@ -595,17 +595,17 @@
     width: 100%;
   }
   .dockInner {
-    gap: 12px;
-    padding: 10px 14px;
+    gap: 2vw;
+    padding: 8px 2.5vw;
     border-radius: 14px;
-    max-width: 95vw;
-    flex-wrap: wrap;
+    max-width: 100%;
+    flex-wrap: nowrap;
     margin: 0 auto;
     justify-content: center;
   }
   .dockItem {
-    width: 52px;
-    height: 52px;
+    width: min(50px, 13vw);
+    height: min(50px, 13vw);
   }
   .warning {
     font-size: 11px;

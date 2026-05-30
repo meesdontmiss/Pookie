@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     const houseCutPercentage =
       typeof parsed.data.houseCutPercentage === 'number'
         ? parsed.data.houseCutPercentage
-        : Number(process.env.HOUSE_CUT_PERCENTAGE ?? '0.04')
+        : Number(process.env.HOUSE_CUT_PERCENTAGE ?? '0.05')
 
     const result = await payoutFromEscrow({
       escrowPublicKey,

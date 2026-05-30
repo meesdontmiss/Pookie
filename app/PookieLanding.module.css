@@ -29,14 +29,14 @@
 .headerBand {
   position: relative;
   z-index: 4;
-  height: clamp(96px, 18vh, 162px);
+  height: clamp(88px, 14vh, 130px);
   background: linear-gradient(90deg, #67ad4d 0 24.3%, #168a41 24.3% 75.7%, #67ad4d 75.7% 100%);
 }
 
 .flagLeft,
 .flagRight {
   position: absolute;
-  top: clamp(18px, 4vh, 36px);
+  bottom: 0;
   width: clamp(74px, 6.6vw, 125px);
   height: clamp(74px, 6.6vw, 125px);
 }
@@ -51,7 +51,8 @@
 
 .headerCrown {
   position: absolute;
-  top: clamp(-34px, -2.5vh, -12px);
+  /* Center the hat art (which sits at ~7-24% of the gif box) vertically in the band */
+  top: calc(50% - 0.156 * clamp(300px, 27vw, 520px));
   left: 50%;
   width: clamp(300px, 27vw, 520px);
   height: auto;
@@ -62,7 +63,7 @@
   position: relative;
   z-index: 1;
   width: min(1920px, 100vw);
-  height: calc(100% - clamp(96px, 18vh, 162px));
+  height: calc(100% - clamp(88px, 14vh, 130px));
   margin: 0 auto;
 }
 
@@ -80,23 +81,26 @@
 }
 
 .sidePookieLeft {
-  left: clamp(28px, 4.2vw, 82px);
+  left: clamp(-40px, -1vw, 10px);
 }
 
 .sidePookieRight {
-  right: clamp(28px, 4.2vw, 82px);
+  right: clamp(-40px, -1vw, 10px);
   transform: scaleX(-1);
 }
 
 .pinkPookie {
   top: clamp(44px, 8vh, 70px);
-  left: clamp(180px, 24.4vw, 468px);
+  /* Track the title's left edge so it never overlaps the "Pookie" letters.
+     Max freezes at the 1920 collage width so it can't drift back over the title on ultrawide. */
+  left: clamp(40px, 34vw - 217px, 435px);
   width: clamp(160px, 13.2vw, 252px);
 }
 
 .swordPookie {
   top: clamp(52px, 8.8vh, 78px);
-  right: clamp(190px, 28vw, 530px);
+  /* Mirror of pinkPookie: track the title's right edge */
+  right: clamp(40px, 34vw - 217px, 435px);
   width: clamp(160px, 12.8vw, 244px);
 }
 
@@ -109,7 +113,8 @@
 }
 
 .subtitleText {
-  top: clamp(170px, 25vh, 210px);
+  /* Track the title's width-based size so the tagline stays tucked ~24px under it */
+  top: clamp(150px, 9vw + 34px, 210px);
   left: 50%;
   width: clamp(360px, 28vw, 540px);
   mix-blend-mode: multiply;
@@ -118,16 +123,16 @@
 
 .flameLeft,
 .flameRight {
-  top: clamp(405px, 50vh, 480px);
-  width: clamp(132px, 11.5vw, 220px);
+  top: clamp(360px, 46vh, 440px);
+  width: clamp(160px, 14vw, 270px);
 }
 
 .flameLeft {
-  left: clamp(190px, 19.5vw, 380px);
+  left: clamp(96px, 11.5vw, 230px);
 }
 
 .flameRight {
-  right: clamp(190px, 19.5vw, 380px);
+  right: clamp(96px, 11.5vw, 230px);
   transform: scaleX(-1);
 }
 
@@ -142,7 +147,7 @@
 
 .topLinks {
   position: absolute;
-  top: calc(clamp(96px, 18vh, 162px) + 28px);
+  top: calc(clamp(88px, 14vh, 130px) + 28px);
   left: 50%;
   bottom: auto;
   z-index: 170;
@@ -217,6 +222,7 @@
   }
 
   .headerCrown {
+    top: -2px;
     width: 320px;
   }
 
@@ -224,18 +230,13 @@
     height: 610px;
   }
 
-  .sidePookieLeft,
-  .sidePookieRight {
-    top: 250px;
-    width: 160px;
-  }
-
-  .sidePookieLeft {
-    left: 32px;
-  }
-
-  .sidePookieRight {
-    right: 32px;
+  /* Simplify mobile: hide the side penguins and flames for a cleaner view.
+     Qualified with .collage to outweigh the base `.collage img { display: block }`. */
+  .collage .sidePookieLeft,
+  .collage .sidePookieRight,
+  .collage .flameLeft,
+  .collage .flameRight {
+    display: none;
   }
 
   .pinkPookie {
@@ -256,16 +257,8 @@
   }
 
   .subtitleText {
-    top: 430px;
+    top: 262px;
     width: min(420px, 72vw);
-  }
-
-  .flameLeft {
-    left: 18vw;
-  }
-
-  .flameRight {
-    right: 18vw;
   }
 
   .topLinks {
@@ -297,17 +290,12 @@
   }
 
   .headerCrown {
+    top: -2px;
     width: 240px;
   }
 
   .collage {
     height: 520px;
-  }
-
-  .sidePookieLeft,
-  .sidePookieRight {
-    top: 240px;
-    width: 118px;
   }
 
   .pinkPookie,
@@ -322,22 +310,8 @@
   }
 
   .subtitleText {
-    top: 344px;
+    top: 286px;
     width: 80vw;
-  }
-
-  .flameLeft,
-  .flameRight {
-    top: 312px;
-    width: 92px;
-  }
-
-  .flameLeft {
-    left: 18vw;
-  }
-
-  .flameRight {
-    right: 18vw;
   }
 
   .topLinks {

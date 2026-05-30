@@ -8,6 +8,8 @@ import { FallingSnow } from '../../effects/falling-snow'; // Import FallingSnow
 import { Physics, RigidBody, BallCollider, CylinderCollider, TrimeshCollider, CuboidCollider, useRapier } from '@react-three/rapier'; // Added Rapier imports & useRapier
 import { useKeyboardControls } from '@react-three/drei'; // For keyboard controls
 import type { Socket } from 'socket.io-client';
+import { useVoiceChat } from '@/hooks/use-voice-chat';
+import { VoiceChatControl } from '@/components/voice/voice-chat-control';
 import PushEffect from '../../effects/PushEffect'; // Import the new effect
 import MobileControls from './MobileControls';
 import { ASSET_PATHS } from '../../utils/constants';
@@ -1380,6 +1382,7 @@ const SumoArenaScene = ({
   const [localSpawnPosition, setLocalSpawnPosition] = useState<[number, number, number] | null>(null);
   const [activePushEffects, setActivePushEffects] = useState<Array<{ id: string; position: THREE.Vector3; color: string }>>([]);
   const [localBallColor, setLocalBallColor] = useState<string>('#ff66cc');
+  const [localVoicePosition, setLocalVoicePosition] = useState<[number, number, number] | null>(null);
   const [hasUserStarted, setHasUserStarted] = useState(false);
   const mobileInputRef = useRef<{ x: number; y: number; jump: boolean; push: boolean }>({ x: 0, y: 0, jump: false, push: false });
   const localPlayerRef = useRef<any>(null);
@@ -1427,6 +1430,39 @@ const SumoArenaScene = ({
   useEffect(() => {
     remotePlayerEntitiesRef.current = remotePlayerEntities;
   }, [remotePlayerEntities]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const body = localPlayerRef.current;
+      if (!body?.translation) return;
+      const pos = body.translation();
+      setLocalVoicePosition([pos.x, pos.y, pos.z]);
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const voicePositions = useMemo(() => {
+    const next: Record<string, [number, number, number] | undefined> = {};
+    if (localPlayerId) {
+      next[localPlayerId] = localVoicePosition ?? localSpawnPosition ?? undefined;
+    }
+    for (const player of Object.values(remotePlayerEntities)) {
+      if (!player.position) continue;
+      next[player.id] = [player.position.x, player.position.y, player.position.z];
+    }
+    return next;
+  }, [localPlayerId, localSpawnPosition, localVoicePosition, remotePlayerEntities]);
+
+  const voiceChat = useVoiceChat({
+    socket,
+    connected: Boolean(socket?.connected),
+    roomType: 'match',
+    roomId: lobbyId,
+    selfId: localPlayerId || null,
+    username: localDisplayName,
+    positions: voicePositions,
+    proximity: { enabled: true, minDistance: 4, maxDistance: 24 },
+  });
 
 
   // Effect to synchronize internalGameState with prop changes, carefully
@@ -1781,6 +1817,29 @@ const SumoArenaScene = ({
         onPush={handleMobilePush}
         visible={internalGameState === 'ACTIVE' && localPlayerGameStatus === 'InGame'}
       />
+
+      {!offline && (
+        <div style={{
+          position: 'absolute',
+          top: 16,
+          right: 16,
+          zIndex: 1300,
+          pointerEvents: 'auto',
+        }}>
+          <VoiceChatControl
+            compact
+            enabled={voiceChat.enabled}
+            starting={voiceChat.starting}
+            muted={voiceChat.muted}
+            peerCount={voiceChat.peerCount}
+            error={voiceChat.error}
+            disabled={!socket?.connected || !localPlayerId}
+            onStart={voiceChat.start}
+            onStop={voiceChat.stop}
+            onMuteChange={voiceChat.setMuted}
+          />
+        </div>
+      )}
 
       {(!(!hasUserStarted && internalGameState === 'WAITING')) && (
         <GameStatusUI

@@ -28,8 +28,15 @@ function walletShort(wallet: string) {
   return wallet.length > 8 ? `${wallet.slice(0, 4)}...${wallet.slice(-4)}` : wallet
 }
 
-export function useLobbySocket(lobbyId: string | null, username: string | null, wallet: string | null, isPractice: boolean = false) {
+export function useLobbySocket(
+  lobbyId: string | null,
+  username: string | null,
+  wallet: string | null,
+  isPractice: boolean = false,
+  guestIdentity: string | null = null,
+) {
   const [state, setState] = useState<LobbySocketState>(INITIAL_LOBBY_SOCKET_STATE)
+  const [socket, setSocket] = useState<Socket | null>(null)
   const socketRef = useRef<Socket | null>(null)
   const reconnectAttemptsRef = useRef(0)
   const httpPollTimerRef = useRef<number | null>(null)
@@ -52,14 +59,20 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
   const currentUrlIdxRef = useRef(0)
 
   useEffect(() => {
-    const playerId = toPlayerId(wallet)
+    const walletId = toPlayerId(wallet)
+    const guestId = toPlayerId(guestIdentity)
+    const playerId = walletId || (isPractice ? guestId : '')
     if (!lobbyId || !playerId) {
       setState(INITIAL_LOBBY_SOCKET_STATE)
+      setSocket(null)
       return
     }
     // Reset stale state before connecting with a new lobby or player identity.
     setState(INITIAL_LOBBY_SOCKET_STATE)
     reconnectAttemptsRef.current = 0
+    currentUrlIdxRef.current = 0
+    httpJoinedRef.current = false
+    httpPlayerIdRef.current = null
     
     const isProd = process.env.NODE_ENV === 'production'
     // Use /api/socketio to match working Cock Combat implementation
@@ -79,12 +92,13 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
       withCredentials: true,
       autoConnect: true,
     })
+    setSocket(socketInstance)
 
     // Lightweight HTTP fallback when socket cannot connect (join + poll)
     const startHttpFallback = async () => {
       if (!ENABLE_HTTP_FALLBACK || !lobbyId || httpJoinedRef.current) return
       try {
-        const effectiveUsername = username || 'Player'
+        const effectiveUsername = username || (playerId.startsWith('guest_') ? `Guest ${playerId.slice(-4)}` : 'Player')
         // Join (create/update) player
         const res = await fetch(`/api/lobbies/${encodeURIComponent(lobbyId)}/players`, {
           method: 'POST',
@@ -146,7 +160,7 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
         s.emit('register_identity', playerId)
 
         // Join lobby after identity resolution
-        const effectiveUsername = username || 'Player'
+        const effectiveUsername = username || (playerId.startsWith('guest_') ? `Guest ${playerId.slice(-4)}` : 'Player')
         const join: ClientToServer = { type: 'join_lobby', lobbyId, username: effectiveUsername, wallet: playerId }
         s.emit('message', join)
         // Cock Combat compatibility: also join room and request snapshot via classic events
@@ -199,6 +213,7 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
 
           setupHandlers(socketInstance)
           socketRef.current = socketInstance
+          setSocket(socketInstance)
           return
         }
 
@@ -226,6 +241,7 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
           })
           setupHandlers(socketInstance)
           socketRef.current = socketInstance
+          setSocket(socketInstance)
           return
         }
 
@@ -352,6 +368,7 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
 
     setupHandlers(socketInstance)
     socketRef.current = socketInstance
+    setSocket(socketInstance)
 
     return () => {
       // Cleanup HTTP fallback if active
@@ -373,8 +390,9 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
         socketInstance.disconnect()
       }
       socketRef.current = null
+      setSocket(null)
     }
-  }, [lobbyId, urlCandidates, username, wallet])
+  }, [lobbyId, urlCandidates, username, wallet, isPractice, guestIdentity])
 
   const confirmWager = (amount: number, txSignature: string) => {
     if (!socketRef.current || !lobbyId) return
@@ -389,12 +407,12 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
 
   const adminEndMatch = (matchId: string, winnerWallet: string) => {
     if (!socketRef.current) return
-    socketRef.current.emit('message', { type: 'admin_end_match', matchId, winnerWallet } as any)
+    socketRef.current.emit('message', { type: 'admin_end_match', matchId, winnerWallet } as ClientToServer)
   }
 
   const reportMatchResult = (matchId: string, winnerWallet: string) => {
     if (!socketRef.current) return
-    socketRef.current.emit('message', { type: 'match_result', matchId, winnerWallet } as any)
+    socketRef.current.emit('message', { type: 'match_result', matchId, winnerWallet } as ClientToServer)
   }
 
   const selectColor = (color: string) => {
@@ -402,5 +420,5 @@ export function useLobbySocket(lobbyId: string | null, username: string | null, 
     socketRef.current.emit('message', { type: 'select_color', lobbyId, color } as ClientToServer)
   }
 
-  return { state, confirmWager, setReady, adminEndMatch, reportMatchResult, selectColor }
+  return { state, socket, confirmWager, setReady, adminEndMatch, reportMatchResult, selectColor }
 }

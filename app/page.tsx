@@ -10,7 +10,9 @@ import { POOKIE_DEXSCREENER_URL, POOKIE_MAGIC_EDEN_URL } from "@/lib/pookie-link
 
 const WIX = "/website/wix"
 const BEHIND_THE_SCENES_DOCK_IMAGE_STYLE: CSSProperties = { borderRadius: "16px", objectFit: "cover" }
-const FLY_VISIBLE_MS = 3800
+// Matches the full play-through of pookster-fly.gif (201 frames ≈ 8040ms) so
+// Pookie glides fully in and out of frame instead of being unmounted mid-flight.
+const FLY_VISIBLE_MS = 8040
 const FLY_PAUSE_MS = 7500
 
 const topLinks = [

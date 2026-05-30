@@ -14,7 +14,12 @@
     "test:poker:socket": "tsx server/pookie-poker/tests/poker-socket.test.ts",
     "prepare-text-generation": "node ./scripts/prepare-text-generation.js",
     "db:generate": "drizzle-kit generate",
-    "stress": "node scripts/stress-test.js"
+    "stress": "node scripts/stress-test.js",
+    "remotion:studio": "node remotion/node_modules/@remotion/cli/remotion-cli.js studio remotion/src/index.ts --config remotion/remotion.config.ts",
+    "remotion:compositions": "node remotion/node_modules/@remotion/cli/remotion-cli.js compositions remotion/src/index.ts --config remotion/remotion.config.ts",
+    "remotion:render": "node remotion/node_modules/@remotion/cli/remotion-cli.js render remotion/src/index.ts GameplayHighlight remotion/out/gameplay.mp4 --config remotion/remotion.config.ts",
+    "remotion:render:montage": "node remotion/node_modules/@remotion/cli/remotion-cli.js render remotion/src/index.ts KillMontage remotion/out/montage.mp4 --config remotion/remotion.config.ts",
+    "remotion:render:intro": "node remotion/node_modules/@remotion/cli/remotion-cli.js render remotion/src/index.ts GameIntro remotion/out/intro.mp4 --config remotion/remotion.config.ts"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.11.2",

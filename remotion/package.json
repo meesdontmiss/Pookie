@@ -1,0 +1,31 @@
+{
+  "name": "pookie-remotion",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Remotion video compositions for Pookie Sumo Royale gameplay content",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts PromoVideo out/promo.mp4",
+    "upgrade": "remotion upgrade"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.242",
+    "@remotion/cli": "4.0.242",
+    "@remotion/player": "4.0.242",
+    "@remotion/three": "4.0.242",
+    "@react-three/drei": "^9.122.0",
+    "@react-three/fiber": "^8.18.0",
+    "react": "^18",
+    "react-dom": "^18",
+    "remotion": "4.0.242",
+    "three": "^0.159.0",
+    "@types/three": "^0.174.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@remotion/eslint-config": "4.0.242",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "typescript": "^5"
+  }
+}

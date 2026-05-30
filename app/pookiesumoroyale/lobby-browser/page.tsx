@@ -9,6 +9,7 @@ import { HARDCODED_LOBBIES, HardLobby } from '@/shared/hardcoded-lobbies'
 import LobbyPanel from '@/components/lobby/lobby-panel'
 import styles from './lobby.module.css'
 import { useLobbyCounts } from '@/hooks/use-lobby-counts'
+import { useGuestIdentity } from '@/hooks/use-guest-identity'
 import { History } from 'lucide-react'
 
 type CpuDifficulty = 'easy' | 'normal' | 'hard'
@@ -21,6 +22,7 @@ const CPU_DIFFICULTIES: Array<{ value: CpuDifficulty; label: string }> = [
 
 export default function LobbyBrowserPage() {
   const router = useRouter();
+  const guestId = useGuestIdentity();
 
   const [isLoading, setIsLoading] = useState(true);
   const [panelOpen, setPanelOpen] = useState(false)
@@ -278,7 +280,7 @@ export default function LobbyBrowserPage() {
                 {/* Side Panel (only when joined) */}
                 {panelOpen && activeLobby && (
                   <div className={`${styles.side} ${styles.sideOpen}`}>
-                    <LobbyPanel inline lobby={activeLobby} open={panelOpen} onClose={() => setPanelOpen(false)} />
+                    <LobbyPanel inline lobby={activeLobby} open={panelOpen} onClose={() => setPanelOpen(false)} guestIdentity={guestId} />
                   </div>
                 )}
               </div>

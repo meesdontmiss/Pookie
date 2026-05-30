@@ -5,6 +5,8 @@ export type ClientToServer =
   | { type: 'select_color'; lobbyId: string; color: string }
   | { type: 'leave_lobby'; lobbyId: string }
   | { type: 'reconnect'; lobbyId: string; lastEventId?: string }
+  | { type: 'admin_end_match'; matchId: string; winnerWallet: string }
+  | { type: 'match_result'; matchId: string; winnerWallet: string }
 
 export type ServerToClient =
   | { type: 'lobby_state'; lobbyId: string; players: UIRoomPlayer[]; countdown?: number; status: 'open' | 'countdown' }

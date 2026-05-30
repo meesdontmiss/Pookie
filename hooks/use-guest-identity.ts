@@ -81,7 +81,11 @@ export function useGuestIdentity() {
  * Get current player identifier (wallet or guest ID)
  * Matches Cock Combat's getCurrentPlayerId pattern
  */
-export function getCurrentPlayerId(publicKey?: any): string | undefined {
+export function getCurrentPlayerId(
+  publicKey?: any,
+  guestId?: string | null,
+  allowGuest = true,
+): string | undefined {
   try {
     // Try wallet first
     if (publicKey) {
@@ -91,6 +95,12 @@ export function getCurrentPlayerId(publicKey?: any): string | undefined {
       if (typeof (publicKey as any).toString === 'function') {
         return (publicKey as any).toString()
       }
+    }
+
+    if (!allowGuest) return undefined
+
+    if (typeof guestId === 'string' && guestId.trim()) {
+      return guestId.trim()
     }
 
     // Fallback to guest identity

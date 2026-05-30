@@ -31,7 +31,7 @@ export default function GamePage() {
   const searchParams = useSearchParams(); // To potentially get isPractice if passed in query
   const router = useRouter();
   const { publicKey } = useWallet();
-  useGuestIdentity();
+  const guestId = useGuestIdentity();
 
   // Safely extract gameId - params can be string | string[] | undefined
   const rawGameId = params?.gameId;
@@ -88,6 +88,7 @@ export default function GamePage() {
       isPractice={isPractice}
       offline={isOfflinePractice}
       cpuDifficulty={cpuDifficulty}
+      guestIdentity={guestId}
     />
   );
 } 

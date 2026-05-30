@@ -111,10 +111,19 @@ const server = http.createServer(app)
 // This path works reliably with Render's WebSocket proxy
 const SOCKET_IO_PATH = process.env.SOCKET_IO_PATH || '/api/socketio'
 
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || process.env.NEXT_PUBLIC_APP_URL || 'https://www.pookiethepeng.com')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean)
+// In development, also allow localhost
+if (process.env.NODE_ENV !== 'production') {
+  ALLOWED_ORIGINS.push('http://localhost:3000', 'http://localhost:3001', 'http://localhost:4001')
+}
+
 const io = new Server(server, {
   path: SOCKET_IO_PATH,
   addTrailingSlash: false,
-  cors: { origin: '*', methods: ['GET', 'POST'] },
+  cors: { origin: ALLOWED_ORIGINS, methods: ['GET', 'POST'] },
 })
 
 // Active matches (for payout after game end)
@@ -132,8 +141,20 @@ interface ActiveMatch {
 const activeMatches = new Map<MatchId, ActiveMatch>()
 const lastMatchByLobby = new Map<LobbyId, MatchId>()
 const processedRefunds = new Set<string>() // track by txSignature to avoid duplicates
+const usedWagerSignatures = new Map<string, string>() // txSignature -> lobbyId (prevent replay across lobbies)
 const socketToMatch = new Map<string, string>() // map socket.id -> matchId
 const socketToLobby = new Map<string, LobbyId>()
+
+type VoiceRoomType = 'lobby' | 'match'
+
+interface VoiceParticipant {
+  peerId: string
+  socketId: string
+  username: string
+}
+
+const voiceRooms = new Map<string, Map<string, VoiceParticipant>>()
+const socketToVoiceRoomKeys = new Map<string, Set<string>>()
 
 // Lazy getter for Supabase to avoid loading env vars at module init time
 function getSupabase() {
@@ -148,6 +169,58 @@ const MATCH_ELIMINATION_Y = -5
 
 function fireAndForget<T>(promise: Promise<T>, context: string, meta?: Record<string, any>) {
   promise.catch((err) => logger.error({ err, context, ...meta }, 'Async task failed'))
+}
+
+function voiceRoomKey(roomType: VoiceRoomType, roomId: string) {
+  return `voice:${roomType}:${roomId}`
+}
+
+function getVoiceRoom(roomKey: string) {
+  let room = voiceRooms.get(roomKey)
+  if (!room) {
+    room = new Map<string, VoiceParticipant>()
+    voiceRooms.set(roomKey, room)
+  }
+  return room
+}
+
+function getVoiceParticipantBySocket(roomKey: string, socketId: string) {
+  const room = voiceRooms.get(roomKey)
+  if (!room) return null
+  for (const participant of room.values()) {
+    if (participant.socketId === socketId) return participant
+  }
+  return null
+}
+
+function socketCanJoinVoiceRoom(socketId: string, roomType: VoiceRoomType, roomId: string) {
+  if (!roomId) return false
+  if (roomType === 'lobby') return socketToLobby.get(socketId) === roomId
+  return socketToMatch.get(socketId) === roomId
+}
+
+function leaveVoiceRoom(socket: any, requestedRoomKey?: string) {
+  const roomKeys = requestedRoomKey ? new Set([requestedRoomKey]) : socketToVoiceRoomKeys.get(socket.id)
+  if (!roomKeys) return
+
+  for (const roomKey of roomKeys) {
+    const room = voiceRooms.get(roomKey)
+    if (!room) continue
+    const participant = getVoiceParticipantBySocket(roomKey, socket.id)
+    if (!participant) continue
+    room.delete(participant.peerId)
+    socket.leave(roomKey)
+    socket.to(roomKey).emit('voice:user_left', { peerId: participant.peerId })
+    if (room.size === 0) voiceRooms.delete(roomKey)
+  }
+
+  if (requestedRoomKey) {
+    const tracked = socketToVoiceRoomKeys.get(socket.id)
+    tracked?.delete(requestedRoomKey)
+    if (tracked && tracked.size === 0) socketToVoiceRoomKeys.delete(socket.id)
+  } else {
+    socketToVoiceRoomKeys.delete(socket.id)
+  }
 }
 
 if (!TRACK_LOBBY_PRESENCE) {
@@ -479,7 +552,7 @@ async function enqueuePayoutsForMatch(match: ActiveMatch, winnerWallet: string |
   for (const p of match.players) {
     byEscrow.set(p.escrowAddress, (byEscrow.get(p.escrowAddress) || 0) + p.amountSol)
   }
-  const housePct = Number(process.env.HOUSE_CUT_PERCENTAGE ?? '0.04')
+  const housePct = Number(process.env.HOUSE_CUT_PERCENTAGE ?? '0.05')
   const admin = process.env.NEXT_PUBLIC_ADMIN_WALLET || process.env.ADMIN_WALLET
   if (!admin) throw new Error('Admin wallet not configured')
   for (const [escrow, pot] of byEscrow.entries()) {
@@ -494,27 +567,35 @@ async function enqueuePayoutsForMatch(match: ActiveMatch, winnerWallet: string |
   }
 }
 
+const finishingMatches = new Set<MatchId>() // atomic guard against concurrent finishMatch calls
 async function finishMatch(matchId: MatchId, winnerWallet?: string) {
-  const match = activeMatches.get(matchId)
-  if (!match || match.finished) return
-  match.finished = true
-  activeMatches.delete(matchId)
-  if (winnerWallet) {
-    await enqueuePayoutsForMatch(match, winnerWallet)
-    await recordMatchResult(matchId, 'completed', winnerWallet)
-    metrics.matchesFinished += 1
-    logger.info({ matchId, winnerWallet }, 'Match finished')
-  } else {
-    await recordMatchResult(matchId, 'cancelled', undefined)
-    metrics.matchesFinished += 1
-    logger.info({ matchId }, 'Match cancelled')
-  }
-  io.to(matchId).emit('match_finished', { matchId, winner: winnerWallet ?? null })
+  // Atomic guard: prevent concurrent calls from double-processing the same match
+  if (finishingMatches.has(matchId)) return
+  finishingMatches.add(matchId)
+  try {
+    const match = activeMatches.get(matchId)
+    if (!match || match.finished) return
+    match.finished = true
+    activeMatches.delete(matchId)
+    if (winnerWallet) {
+      await enqueuePayoutsForMatch(match, winnerWallet)
+      await recordMatchResult(matchId, 'completed', winnerWallet)
+      metrics.matchesFinished += 1
+      logger.info({ matchId, winnerWallet }, 'Match finished')
+    } else {
+      await recordMatchResult(matchId, 'cancelled', undefined)
+      metrics.matchesFinished += 1
+      logger.info({ matchId }, 'Match cancelled')
+    }
+    io.to(matchId).emit('match_finished', { matchId, winner: winnerWallet ?? null })
 
-  // Reset lobby status back to 'open' so new players can join
-  const lobbyId = match.lobbyId
-  if (lobbyId) {
-    fireAndForget(updateLobbyStatusDb(lobbyId, 'open'), 'updateLobbyStatusDb', { lobbyId, status: 'open' })
+    // Reset lobby status back to 'open' so new players can join
+    const lobbyId = match.lobbyId
+    if (lobbyId) {
+      fireAndForget(updateLobbyStatusDb(lobbyId, 'open'), 'updateLobbyStatusDb', { lobbyId, status: 'open' })
+    }
+  } finally {
+    finishingMatches.delete(matchId)
   }
 }
 
@@ -646,9 +727,11 @@ async function claimPendingJobs(limit = 5) {
 }
 
 async function markJobProcessing(id: string, currentStatus: string) {
+  // Atomic claim: only succeeds if status hasn't changed since we read it.
+  // This prevents two server instances from double-processing the same job.
   const { data, error } = await getSupabase()
     .from('payment_jobs')
-    .update({ status: 'processing' })
+    .update({ status: 'processing', updated_at: new Date().toISOString() })
     .eq('id', id)
     .eq('status', currentStatus)
     .select('id')
@@ -740,6 +823,33 @@ setInterval(() => {
     console.error('[stale-matches] reconcile loop error', error),
   )
 }, (Number(process.env.STALE_MATCH_RECONCILE_INTERVAL_MS ?? '60000') || 60000))
+
+// Periodically clean up stale entries from in-memory sets to prevent unbounded growth
+const MEMORY_CLEANUP_INTERVAL_MS = 10 * 60 * 1000 // 10 minutes
+const MAX_PROCESSED_REFUNDS_SIZE = 5000
+const MAX_USED_WAGER_SIGNATURES_SIZE = 5000
+setInterval(() => {
+  if (processedRefunds.size > MAX_PROCESSED_REFUNDS_SIZE) {
+    const excess = processedRefunds.size - MAX_PROCESSED_REFUNDS_SIZE
+    const iter = processedRefunds.values()
+    for (let i = 0; i < excess; i++) iter.next()
+    // Keep only the most recent entries by clearing and re-adding
+    const keep = new Set<string>()
+    for (const v of iter) keep.add(v)
+    processedRefunds.clear()
+    for (const v of keep) processedRefunds.add(v)
+    logger.info({ trimmed: excess, remaining: processedRefunds.size }, 'Trimmed processedRefunds set')
+  }
+  if (usedWagerSignatures.size > MAX_USED_WAGER_SIGNATURES_SIZE) {
+    const excess = usedWagerSignatures.size - MAX_USED_WAGER_SIGNATURES_SIZE
+    const iter = usedWagerSignatures.keys()
+    for (let i = 0; i < excess; i++) {
+      const key = iter.next().value
+      if (key) usedWagerSignatures.delete(key)
+    }
+    logger.info({ trimmed: excess, remaining: usedWagerSignatures.size }, 'Trimmed usedWagerSignatures map')
+  }
+}, MEMORY_CLEANUP_INTERVAL_MS)
 
 
 // Build in-memory lobbies from hardcoded list
@@ -1066,6 +1176,14 @@ io.on('connection', (socket) => {
               return
             }
 
+            // SECURITY: Prevent tx signature replay across lobbies
+            const existingLobby = usedWagerSignatures.get(signature)
+            if (existingLobby && existingLobby !== lobby.id) {
+              socket.emit('message', { type: 'error', message: 'Transaction signature already used in another lobby', code: 'ERR_TX_REPLAY' } as ServerToClient)
+              logger.warn({ signature, existingLobby, attemptedLobby: lobby.id, wallet: player.wallet }, 'Blocked tx signature replay across lobbies')
+              return
+            }
+
             // Fetch transaction
             const tx = await getTransactionDetails(signature)
             if (!tx || !tx.meta || !tx.transaction) {
@@ -1079,7 +1197,7 @@ io.on('connection', (socket) => {
 
             // Map account keys to indexes
             const keys = tx.transaction.message.accountKeys.map((k: any) => (typeof k === 'string' ? k : k.pubkey?.toString?.() || String(k)))
-            const playerIndex = keys.findIndex((k: string) => k?.toLowerCase?.() === player.wallet.toLowerCase())
+            const playerIndex = keys.findIndex((k: string) => k === player.wallet)
             const escrowIndex = keys.findIndex((k: string) => escrowCandidates.has(k))
 
             if (playerIndex === -1 || escrowIndex === -1) {
@@ -1104,6 +1222,7 @@ io.on('connection', (socket) => {
             }
 
             // Mark locked and store signature
+            usedWagerSignatures.set(signature, lobby.id)
             player.txSignature = signature
             player.wagerLocked = true
             player.escrowAddress = keys[escrowIndex]
@@ -1184,8 +1303,8 @@ io.on('connection', (socket) => {
           }
           if (callerWallet) break
         }
-        const adminWallet = (process.env.NEXT_PUBLIC_ADMIN_WALLET || process.env.ADMIN_WALLET || '').toLowerCase()
-        if (!callerWallet || callerWallet.toLowerCase() !== adminWallet) {
+        const adminWallet = (process.env.NEXT_PUBLIC_ADMIN_WALLET || process.env.ADMIN_WALLET || '').trim()
+        if (!callerWallet || callerWallet !== adminWallet) {
           socket.emit('message', { type: 'error', message: 'Unauthorized admin action', code: 'ERR_UNAUTHORIZED' } as ServerToClient)
           return
         }
@@ -1203,11 +1322,11 @@ io.on('connection', (socket) => {
         })
       }
       if (data.type === 'match_result') {
-        // Game client reports winner at end of match
-        const matchId = (data as any).matchId as string | undefined
-        const winner = (data as any).winnerWallet as string | undefined
-        if (!matchId || !winner) return
-        void finishMatch(matchId, winner).catch((e) => console.error('❌ Auto finish match failed:', e))
+        // SECURITY: Only the server's authoritative elimination logic (handlePlayerStateUpdate)
+        // should determine winners. Client-reported match_result is ignored to prevent
+        // attackers from declaring themselves as winner and stealing the pot.
+        // The server already detects the last player standing via Y-position checks.
+        logger.warn({ socketId: socket.id, matchId: (data as any).matchId, winner: (data as any).winnerWallet }, 'Ignored client-sent match_result (server-authoritative only)')
       }
       if (data.type === 'leave_lobby') {
         const lobby = lobbies.get(data.lobbyId); if (!lobby) return
@@ -1311,7 +1430,107 @@ io.on('connection', (socket) => {
     } catch {}
   })
 
+  socket.on('voice:join', async (payload: { roomType?: VoiceRoomType; roomId?: string; peerId?: string; username?: string }) => {
+    try {
+      const roomType = payload?.roomType === 'match' ? 'match' : payload?.roomType === 'lobby' ? 'lobby' : null
+      const roomId = typeof payload?.roomId === 'string' ? payload.roomId.trim() : ''
+      if (!roomType || !roomId || !socketCanJoinVoiceRoom(socket.id, roomType, roomId)) {
+        socket.emit('voice:error', { message: 'Join the lobby or match before enabling voice.' })
+        return
+      }
+
+      const peerId = (typeof payload.peerId === 'string' && payload.peerId.trim())
+        || String((socket.data as any)?.wallet || socket.id)
+      const username = (typeof payload.username === 'string' && payload.username.trim())
+        || walletShort(peerId)
+      const roomKey = voiceRoomKey(roomType, roomId)
+      const room = getVoiceRoom(roomKey)
+      const existing = room.get(peerId)
+
+      if (existing && existing.socketId !== socket.id) {
+        const oldSocket = io.sockets.sockets.get(existing.socketId)
+        oldSocket?.leave(roomKey)
+        oldSocket?.emit('voice:replaced', { roomType, roomId })
+        const oldRooms = socketToVoiceRoomKeys.get(existing.socketId)
+        oldRooms?.delete(roomKey)
+        if (oldRooms && oldRooms.size === 0) socketToVoiceRoomKeys.delete(existing.socketId)
+      }
+
+      const participants = Array.from(room.values())
+        .filter((participant) => participant.socketId !== socket.id && participant.peerId !== peerId)
+        .map(({ peerId, username }) => ({ peerId, username }))
+
+      room.set(peerId, { peerId, socketId: socket.id, username })
+      let trackedRooms = socketToVoiceRoomKeys.get(socket.id)
+      if (!trackedRooms) {
+        trackedRooms = new Set<string>()
+        socketToVoiceRoomKeys.set(socket.id, trackedRooms)
+      }
+      trackedRooms.add(roomKey)
+      await socket.join(roomKey)
+
+      socket.emit('voice:participants', { roomType, roomId, participants })
+      socket.to(roomKey).emit('voice:user_joined', { peerId, username })
+    } catch (err) {
+      logger.error({ err, socketId: socket.id }, 'Voice join failed')
+      socket.emit('voice:error', { message: 'Voice join failed.' })
+    }
+  })
+
+  socket.on('voice:leave', (payload: { roomType?: VoiceRoomType; roomId?: string }) => {
+    const roomType = payload?.roomType === 'match' ? 'match' : payload?.roomType === 'lobby' ? 'lobby' : null
+    const roomId = typeof payload?.roomId === 'string' ? payload.roomId.trim() : ''
+    if (roomType && roomId) {
+      leaveVoiceRoom(socket, voiceRoomKey(roomType, roomId))
+      return
+    }
+    leaveVoiceRoom(socket)
+  })
+
+  socket.on('voice:offer', (payload: { roomType?: VoiceRoomType; roomId?: string; to?: string; offer?: unknown }) => {
+    try {
+      const roomType = payload?.roomType === 'match' ? 'match' : payload?.roomType === 'lobby' ? 'lobby' : null
+      const roomId = typeof payload?.roomId === 'string' ? payload.roomId.trim() : ''
+      const to = typeof payload?.to === 'string' ? payload.to.trim() : ''
+      if (!roomType || !roomId || !to || !payload.offer) return
+      const roomKey = voiceRoomKey(roomType, roomId)
+      const from = getVoiceParticipantBySocket(roomKey, socket.id)
+      const target = voiceRooms.get(roomKey)?.get(to)
+      if (!from || !target) return
+      io.to(target.socketId).emit('voice:offer', { roomType, roomId, from: from.peerId, offer: payload.offer })
+    } catch {}
+  })
+
+  socket.on('voice:answer', (payload: { roomType?: VoiceRoomType; roomId?: string; to?: string; answer?: unknown }) => {
+    try {
+      const roomType = payload?.roomType === 'match' ? 'match' : payload?.roomType === 'lobby' ? 'lobby' : null
+      const roomId = typeof payload?.roomId === 'string' ? payload.roomId.trim() : ''
+      const to = typeof payload?.to === 'string' ? payload.to.trim() : ''
+      if (!roomType || !roomId || !to || !payload.answer) return
+      const roomKey = voiceRoomKey(roomType, roomId)
+      const from = getVoiceParticipantBySocket(roomKey, socket.id)
+      const target = voiceRooms.get(roomKey)?.get(to)
+      if (!from || !target) return
+      io.to(target.socketId).emit('voice:answer', { roomType, roomId, from: from.peerId, answer: payload.answer })
+    } catch {}
+  })
+
+  socket.on('voice:ice-candidate', (payload: { roomType?: VoiceRoomType; roomId?: string; to?: string; candidate?: unknown }) => {
+    try {
+      const roomType = payload?.roomType === 'match' ? 'match' : payload?.roomType === 'lobby' ? 'lobby' : null
+      const roomId = typeof payload?.roomId === 'string' ? payload.roomId.trim() : ''
+      const to = typeof payload?.to === 'string' ? payload.to.trim() : ''
+      if (!roomType || !roomId || !to || !payload.candidate) return
+      const roomKey = voiceRoomKey(roomType, roomId)
+      const from = getVoiceParticipantBySocket(roomKey, socket.id)
+      const target = voiceRooms.get(roomKey)?.get(to)
+      if (!from || !target) return
+      io.to(target.socketId).emit('voice:ice-candidate', { roomType, roomId, from: from.peerId, candidate: payload.candidate })
+    } catch {}
+  })
+
   socket.on('disconnect', () => {
+    leaveVoiceRoom(socket)
     // Remove player from any lobby
     for (const lobby of lobbies.values()) {
       let changed = false
@@ -1365,7 +1584,17 @@ const metrics = {
 }
 
 const PORT = process.env.PORT || 4001
-app.get('/health', (_req, res) => res.json({ ok: true, metrics }))
+app.get('/health', (req: express.Request, res: express.Response) => {
+  // Basic health (no auth needed)
+  const basic = { ok: true, uptime: process.uptime() }
+  // Full metrics require admin secret
+  const secret = req.headers['x-admin-secret']
+  const expected = process.env.PAYOUT_SERVER_SECRET || process.env.ADMIN_SERVER_SECRET
+  if (expected && secret === expected) {
+    return res.json({ ...basic, metrics })
+  }
+  return res.json(basic)
+})
 server.listen(PORT, () => logger.info({ port: PORT }, 'sumo socket listening'))
 
 // AI movement logic
@@ -1443,4 +1672,3 @@ setInterval(() => {
     io.to(matchId).emit('gameStatusUpdate', payload)
   }
 }, MATCH_TICK_INTERVAL_MS)
-

@@ -6,7 +6,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 
 import { supabase } from "@/services/supabase-config";
 import { WagerPrompt } from "./WagerPrompt";
-import { useGuestIdentity } from "@/hooks/use-guest-identity";
+import { getCurrentPlayerId, useGuestIdentity } from "@/hooks/use-guest-identity";
 
 interface LobbyMeta {
   id: string;
@@ -50,7 +50,7 @@ export default function NewLobbyRoom({
   const router = useRouter();
   const { publicKey } = useWallet();
   const guestId = useGuestIdentity();
-  const walletAddress = publicKey?.toBase58() ?? (isPractice ? guestId : null);
+  const walletAddress = getCurrentPlayerId(publicKey, guestId, isPractice) ?? null;
 
   const [lobby, setLobby] = useState<LobbyMeta | null>(null);
   const [players, setPlayers] = useState<LobbyPlayer[]>([]);
@@ -289,7 +289,7 @@ export default function NewLobbyRoom({
   const handleStartMatch = () => {
     setStatusMessage("Starting match...");
     setTimeout(() => {
-      router.push(`/pookiesumoroyale/game/${lobbyId}`);
+      router.push(`/pookiesumoroyale/game/${lobbyId}?practice=${isPractice ? "true" : "false"}`);
     }, 800);
   };
 

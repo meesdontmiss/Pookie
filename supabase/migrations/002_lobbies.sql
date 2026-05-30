@@ -40,16 +40,19 @@ create index if not exists idx_lobby_players_joined on lobby_players(joined_at d
 -- Seed lobbies to match app/shared hardcoded IDs (idempotent)
 insert into lobbies (id, name, wager_amount, max_players, current_players, status)
 values
-  ('free-test-match', 'Free Test Match', 0, 4, 0, 'open'),
-  ('small-sumo-005', 'Small Sumo', 0.05, 4, 0, 'open'),
-  ('small-sumo-01', 'Small Sumo', 0.1, 4, 0, 'open'),
-  ('small-sumo-4', 'Small Sumo', 0.25, 4, 0, 'open'),
-  ('big-sumo-6', 'Big Sumo', 0.5, 6, 0, 'open'),
-  ('pookiemania-8', 'Pookiemania', 1.0, 8, 0, 'open')
+  ('free-test-match', 'Free Lobby', 0, 4, 0, 'open'),
+  ('small-sumo-005', 'Low Wager', 0.05, 4, 0, 'open'),
+  ('medium-sumo-025', 'Medium Wager', 0.25, 4, 0, 'open')
 on conflict (id) do update set
   name = excluded.name,
   wager_amount = excluded.wager_amount,
   max_players = excluded.max_players,
   status = excluded.status;
+
+-- Hide obsolete seed rows from older resets without deleting historical data.
+update lobbies
+set status = 'closed'
+where id in ('small-sumo-01', 'small-sumo-4', 'big-sumo-6', 'pookiemania-8')
+  and current_players = 0;
 
 

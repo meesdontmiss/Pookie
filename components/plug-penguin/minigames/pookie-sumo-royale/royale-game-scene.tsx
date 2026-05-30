@@ -15,6 +15,7 @@ interface RoyaleGameSceneProps {
   isPractice: boolean;
   offline?: boolean;
   cpuDifficulty?: CpuDifficulty;
+  guestIdentity?: string | null;
   // Username might be passed if needed for display within the game, separate from lobby profile
   // initialUsername?: string | null; 
 }
@@ -41,7 +42,7 @@ interface GameStaticDetails {
   map: string;
 }
 
-const RoyaleGameScene: React.FC<RoyaleGameSceneProps> = ({ lobbyId, isPractice, offline = false, cpuDifficulty = 'normal' }) => {
+const RoyaleGameScene: React.FC<RoyaleGameSceneProps> = ({ lobbyId, isPractice, offline = false, cpuDifficulty = 'normal', guestIdentity = null }) => {
   const router = useRouter();
   const { publicKey, connected: walletConnected } = useWallet();
 
@@ -76,10 +77,16 @@ const RoyaleGameScene: React.FC<RoyaleGameSceneProps> = ({ lobbyId, isPractice, 
     }
 
     const walletId = publicKey?.toBase58?.() || '';
-    const guest = (typeof window !== 'undefined') ? (localStorage.getItem('guest_id') || (window as any).__guestId) : null;
-    const identity = (walletId || guest || (offline ? 'solo_practice_guest' : '')).toString();
+    const usingOfflineGuestFallback = offline && isPractice && !guestIdentity;
+    const guest = isPractice ? (guestIdentity || (usingOfflineGuestFallback ? 'solo_practice_guest' : '')) : '';
+    const identity = (walletId || guest).toString();
+    if (isPractice && !identity) {
+      setGameStatusMessage('Initializing guest session...');
+      setIsInGameView(true);
+      return;
+    }
     setLocalUsername(
-      offline && !walletId && !guest
+      usingOfflineGuestFallback && !walletId
         ? 'Solo Player'
         : identity
           ? (identity.startsWith('guest_') ? `Guest ${identity.slice(-4)}` : identity.slice(0,8)+'...')
@@ -132,7 +139,7 @@ const RoyaleGameScene: React.FC<RoyaleGameSceneProps> = ({ lobbyId, isPractice, 
       }
       setSocket(null);
     };
-  }, [lobbyId, isPractice, offline, walletConnected, publicKey]);
+  }, [lobbyId, isPractice, offline, walletConnected, publicKey, guestIdentity]);
 
 
   const goBackToLobbyBrowser = () => {
@@ -182,7 +189,7 @@ const RoyaleGameScene: React.FC<RoyaleGameSceneProps> = ({ lobbyId, isPractice, 
              <SumoArenaScene 
                 lobbyId={lobbyId} 
                 isPractice={isPractice} 
-                playerWalletAddress={publicKey?.toBase58() || localUsername || 'guest_unknown'} // local id
+                playerWalletAddress={publicKey?.toBase58() || guestIdentity || (offline ? 'solo_practice_guest' : localUsername) || 'guest_unknown'} // local id
                 socket={socket}
                 localUsername={localUsername}
                 offline={offline}

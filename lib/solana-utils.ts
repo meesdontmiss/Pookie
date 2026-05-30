@@ -11,7 +11,7 @@ import {
   TransactionInstruction,
 } from '@solana/web3.js'
 
-const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
+const RPC_URL = process.env.SOLANA_RPC_URL || process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
 
 /**
  * Get Solana connection

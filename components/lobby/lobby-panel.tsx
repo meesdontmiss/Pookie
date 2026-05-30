@@ -6,8 +6,10 @@ import type { HardLobby } from '@/shared/hardcoded-lobbies'
 import { BALL_COLORS } from '@/shared/contracts'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { useLobbySocket } from '@/lib/lobby-socket'
-import { useGuestIdentity } from '@/hooks/use-guest-identity'
+import { getCurrentPlayerId, useGuestIdentity } from '@/hooks/use-guest-identity'
+import { useVoiceChat } from '@/hooks/use-voice-chat'
 import { useWager } from '@/hooks/use-wager'
+import { VoiceChatControl } from '@/components/voice/voice-chat-control'
 import { Check, Clock, X, Loader2, ArrowLeft, Users, Trophy, Crown, Wallet } from 'lucide-react'
 
 interface PlayerRow {
@@ -30,22 +32,41 @@ export default function LobbyPanel({
   open,
   onClose,
   inline = false,
+  guestIdentity,
 }: {
   lobby: HardLobby | null
   open: boolean
   onClose: () => void
   inline?: boolean
+  guestIdentity?: string | null
 }) {
   const { publicKey } = useWallet()
-  const guestId = useGuestIdentity()
+  const generatedGuestId = useGuestIdentity()
+  const guestId = guestIdentity ?? generatedGuestId
   const lobbyAllowsGuest = (lobby?.wager ?? 0) === 0
-  const walletAddress = publicKey?.toBase58() ?? (lobbyAllowsGuest ? guestId : null)
+  const walletAddress = getCurrentPlayerId(publicKey, guestId, lobbyAllowsGuest) ?? null
   const myName = publicKey
     ? `${publicKey.toBase58().slice(0, 4)}...${publicKey.toBase58().slice(-4)}`
     : walletAddress
       ? `Guest ${walletAddress.slice(-4)}`
       : 'Player'
-  const { state, confirmWager, setReady, adminEndMatch, selectColor } = useLobbySocket(lobby?.id ?? null, myName, walletAddress, (lobby?.wager ?? 0) === 0)
+  const currentPlayerId = walletAddress
+  const activeLobbyId = open ? lobby?.id ?? null : null
+  const { state, socket, confirmWager, setReady, adminEndMatch, selectColor } = useLobbySocket(
+    activeLobbyId,
+    myName,
+    publicKey?.toBase58() ?? null,
+    lobbyAllowsGuest,
+    guestId,
+  )
+  const voiceChat = useVoiceChat({
+    socket,
+    connected: state.connected,
+    roomType: 'lobby',
+    roomId: activeLobbyId,
+    selfId: currentPlayerId,
+    username: myName,
+  })
   const { executeWager, isLoading: isWagerLoading, error: wagerError, reset: resetWager } = useWager()
   
   const [myReady, setMyReady] = useState(false)
@@ -67,7 +88,6 @@ export default function LobbyPanel({
   const [bottomPadding, setBottomPadding] = useState<number>(56)
   const [scrollMaxHeight, setScrollMaxHeight] = useState<number>(0)
 
-  const currentPlayerId = walletAddress
   const missingIdentity = !currentPlayerId
 
   // Measure layout for responsive scroll area
@@ -431,6 +451,18 @@ export default function LobbyPanel({
           <div className="px-2 py-0.5 bg-yellow-500/10 backdrop-blur-sm border border-yellow-500/30 rounded-lg">
             <p className="text-[9px] text-yellow-400 text-center">Min. {minRequired} players required</p>
           </div>
+
+          <VoiceChatControl
+            enabled={voiceChat.enabled}
+            starting={voiceChat.starting}
+            muted={voiceChat.muted}
+            peerCount={voiceChat.peerCount}
+            error={voiceChat.error}
+            disabled={missingIdentity || !state.connected}
+            onStart={voiceChat.start}
+            onStop={voiceChat.stop}
+            onMuteChange={voiceChat.setMuted}
+          />
 
           {/* Ready Button */}
           <div ref={barRef} className="w-full">
