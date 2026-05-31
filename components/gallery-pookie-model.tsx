@@ -20,6 +20,9 @@ const MODEL_BASE_YAW = Math.PI / 2
 // full half-turn (forward somersault into a handstand). Flip *_DIR to mirror.
 const PITCH_GAIN = 1.2
 const PITCH_DIR = 1
+// Cap how far he leans back (cursor up toward the nav bar). Forward lean
+// (toward a handstand) stays unrestricted.
+const PITCH_BACK_LIMIT = 0.85
 const YAW_GAIN = 0.9
 const YAW_DIR = 1
 
@@ -83,7 +86,9 @@ function GalleryPookie({ pointer, onReady = () => undefined }: { pointer: Pointe
     // Pitch about world X (the outer group) tips the head over toward / away
     // from the camera — cursor below center leans him forward into a handstand.
     // Yaw about Y (inner group) turns him to follow the cursor side to side.
-    const pitch = clampPi(-pointer.aimY * PITCH_GAIN * PITCH_DIR)
+    // Forward (positive) up to a handstand; backward (negative) capped.
+    const rawPitch = -pointer.aimY * PITCH_GAIN * PITCH_DIR
+    const pitch = Math.max(-PITCH_BACK_LIMIT, Math.min(Math.PI, rawPitch))
     const yaw = MODEL_BASE_YAW + clampPi(pointer.aimX * YAW_GAIN * YAW_DIR)
 
     pitchRef.current.rotation.x = lerpAngle(pitchRef.current.rotation.x, pitch, t)
