@@ -2,17 +2,31 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Canvas, useFrame } from "@react-three/fiber"
-import { Center, Environment, useGLTF } from "@react-three/drei"
+import { Environment, useGLTF } from "@react-three/drei"
 import * as THREE from "three"
 
 type PointerTarget = {
-  x: number
-  y: number
+  // Cursor direction relative to the model's on-screen center (x right, y up).
+  // The head points along this direction; below center => handstand.
+  aimX: number
+  aimY: number
 }
 
 // The GLB's natural orientation is a side profile, so spin it a quarter turn
-// to rest facing the camera. Flip the sign if Pookie ends up facing away.
+// so its front rests facing the camera. Flip the sign if Pookie faces away.
 const MODEL_BASE_YAW = Math.PI / 2
+
+// Flip to -1 if the head sweeps the mirror-image way around the cursor.
+const ROLL_DIR = 1
+
+// Lerp between angles along the shortest arc so the model never whips the
+// long way around when the target crosses the -π / π seam (e.g. near handstand).
+function lerpAngle(current: number, target: number, t: number) {
+  let diff = (target - current) % (Math.PI * 2)
+  if (diff > Math.PI) diff -= Math.PI * 2
+  if (diff < -Math.PI) diff += Math.PI * 2
+  return current + diff * t
+}
 
 function GalleryPookie({ pointer, onReady = () => undefined }: { pointer: PointerTarget; onReady?: () => void }) {
   const groupRef = useRef<THREE.Group>(null)
@@ -36,6 +50,12 @@ function GalleryPookie({ pointer, onReady = () => undefined }: { pointer: Pointe
       }
     })
 
+    // Pin the pivot to the geometry's bounding-box center so the model rotates
+    // in place instead of orbiting an off-center origin.
+    const box = new THREE.Box3().setFromObject(clone)
+    const center = box.getCenter(new THREE.Vector3())
+    clone.position.sub(center)
+
     return clone
   }, [scene])
 
@@ -47,23 +67,22 @@ function GalleryPookie({ pointer, onReady = () => undefined }: { pointer: Pointe
     if (!groupRef.current) return
 
     const elapsed = clock.getElapsedTime()
-    const targetY = MODEL_BASE_YAW + pointer.x * 0.62
-    const targetX = THREE.MathUtils.clamp(-pointer.y * 0.22, -0.18, 0.2)
-    const targetZ = THREE.MathUtils.clamp(-pointer.x * 0.08, -0.08, 0.08)
-    const targetXPosition = pointer.x * 0.12
 
-    groupRef.current.rotation.y = THREE.MathUtils.lerp(groupRef.current.rotation.y, targetY, 0.075)
-    groupRef.current.rotation.x = THREE.MathUtils.lerp(groupRef.current.rotation.x, targetX, 0.065)
-    groupRef.current.rotation.z = THREE.MathUtils.lerp(groupRef.current.rotation.z, targetZ, 0.055)
-    groupRef.current.position.x = THREE.MathUtils.lerp(groupRef.current.position.x, targetXPosition, 0.06)
+    // Spin in the screen plane so the head points straight at the cursor.
+    // Head rests pointing up (+Y); rotate it toward the cursor's direction.
+    const targetRoll = ROLL_DIR * (Math.atan2(pointer.aimY, pointer.aimX) - Math.PI / 2)
+
+    groupRef.current.rotation.z = lerpAngle(groupRef.current.rotation.z, targetRoll, 0.12)
     groupRef.current.position.y = -0.08 + Math.sin(elapsed * 1.25) * 0.055
   })
 
   return (
-    <group ref={groupRef} scale={0.66} rotation={[0.04, MODEL_BASE_YAW, 0]}>
-      <Center>
+    <group ref={groupRef}>
+      {/* Inner group faces the model toward the camera; the outer group rolls
+          it in the screen plane to point the head at the cursor. */}
+      <group rotation={[0, MODEL_BASE_YAW, 0]} scale={0.66}>
         <primitive object={model} />
-      </Center>
+      </group>
     </group>
   )
 }
@@ -89,7 +108,7 @@ function PookieModelFallback() {
 }
 
 export default function GalleryPookieModel() {
-  const [pointer, setPointer] = useState<PointerTarget>({ x: 0, y: 0 })
+  const [pointer, setPointer] = useState<PointerTarget>({ aimX: 0, aimY: 1 })
   const [isLoaded, setIsLoaded] = useState(false)
   const [inView, setInView] = useState(true)
   const wrapRef = useRef<HTMLDivElement | null>(null)
@@ -97,10 +116,18 @@ export default function GalleryPookieModel() {
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
-      setPointer({
-        x: (event.clientX / window.innerWidth - 0.5) * 2,
-        y: (event.clientY / window.innerHeight - 0.5) * 2,
-      })
+      // Cursor offset from the model's on-screen center, normalized by its
+      // half-size so the look-at intensity is independent of viewport size.
+      const rect = wrapRef.current?.getBoundingClientRect()
+      if (!rect || rect.width === 0 || rect.height === 0) return
+
+      const aimX = (event.clientX - (rect.left + rect.width / 2)) / (rect.width / 2)
+      const aimY = (rect.top + rect.height / 2 - event.clientY) / (rect.height / 2)
+
+      // Ignore the dead zone right at the pivot where direction is undefined.
+      if (Math.hypot(aimX, aimY) < 0.04) return
+
+      setPointer({ aimX, aimY })
     }
 
     window.addEventListener("pointermove", handlePointerMove, { passive: true })
