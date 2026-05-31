@@ -23,6 +23,9 @@ const PITCH_DIR = 1
 const YAW_GAIN = 0.9
 const YAW_DIR = 1
 
+// Follow smoothing. Lower = smoother / more gradual ease toward the cursor.
+const SMOOTHING = 5
+
 // Lerp between angles along the shortest arc so the model never whips the
 // long way around when the target crosses the -π / π seam.
 function lerpAngle(current: number, target: number, t: number) {
@@ -70,10 +73,12 @@ function GalleryPookie({ pointer, onReady = () => undefined }: { pointer: Pointe
     onReady()
   }, [onReady])
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, delta) => {
     if (!pitchRef.current || !yawRef.current) return
 
     const elapsed = clock.getElapsedTime()
+    // Frame-rate independent easing toward the target angles.
+    const t = 1 - Math.exp(-SMOOTHING * delta)
 
     // Pitch about world X (the outer group) tips the head over toward / away
     // from the camera — cursor below center leans him forward into a handstand.
@@ -81,8 +86,8 @@ function GalleryPookie({ pointer, onReady = () => undefined }: { pointer: Pointe
     const pitch = clampPi(-pointer.aimY * PITCH_GAIN * PITCH_DIR)
     const yaw = MODEL_BASE_YAW + clampPi(pointer.aimX * YAW_GAIN * YAW_DIR)
 
-    pitchRef.current.rotation.x = lerpAngle(pitchRef.current.rotation.x, pitch, 0.1)
-    yawRef.current.rotation.y = lerpAngle(yawRef.current.rotation.y, yaw, 0.1)
+    pitchRef.current.rotation.x = lerpAngle(pitchRef.current.rotation.x, pitch, t)
+    yawRef.current.rotation.y = lerpAngle(yawRef.current.rotation.y, yaw, t)
     pitchRef.current.position.y = -0.08 + Math.sin(elapsed * 1.25) * 0.055
   })
 
