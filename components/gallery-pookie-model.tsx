@@ -6,8 +6,8 @@ import { Environment, useGLTF } from "@react-three/drei"
 import * as THREE from "three"
 
 type PointerTarget = {
-  // Cursor direction relative to the model's on-screen center (x right, y up).
-  // The head points along this direction; below center => handstand.
+  // Cursor offset from the model's on-screen center (x right, y up), in units
+  // of the model's half-size. Drives a 3D lean: pitch (X) + turn (Y).
   aimX: number
   aimY: number
 }
@@ -16,11 +16,15 @@ type PointerTarget = {
 // so its front rests facing the camera. Flip the sign if Pookie faces away.
 const MODEL_BASE_YAW = Math.PI / 2
 
-// Flip to -1 if the head sweeps the mirror-image way around the cursor.
-const ROLL_DIR = 1
+// How hard he leans/turns. ~1.2 lets the cursor near the screen edge tip him a
+// full half-turn (forward somersault into a handstand). Flip *_DIR to mirror.
+const PITCH_GAIN = 1.2
+const PITCH_DIR = 1
+const YAW_GAIN = 0.9
+const YAW_DIR = 1
 
 // Lerp between angles along the shortest arc so the model never whips the
-// long way around when the target crosses the -π / π seam (e.g. near handstand).
+// long way around when the target crosses the -π / π seam.
 function lerpAngle(current: number, target: number, t: number) {
   let diff = (target - current) % (Math.PI * 2)
   if (diff > Math.PI) diff -= Math.PI * 2
@@ -28,8 +32,11 @@ function lerpAngle(current: number, target: number, t: number) {
   return current + diff * t
 }
 
+const clampPi = (v: number) => Math.max(-Math.PI, Math.min(Math.PI, v))
+
 function GalleryPookie({ pointer, onReady = () => undefined }: { pointer: PointerTarget; onReady?: () => void }) {
-  const groupRef = useRef<THREE.Group>(null)
+  const pitchRef = useRef<THREE.Group>(null)
+  const yawRef = useRef<THREE.Group>(null)
   const { scene } = useGLTF("/models/POOKIE.glb")
 
   const model = useMemo(() => {
@@ -64,23 +71,26 @@ function GalleryPookie({ pointer, onReady = () => undefined }: { pointer: Pointe
   }, [onReady])
 
   useFrame(({ clock }) => {
-    if (!groupRef.current) return
+    if (!pitchRef.current || !yawRef.current) return
 
     const elapsed = clock.getElapsedTime()
 
-    // Spin in the screen plane so the head points straight at the cursor.
-    // Head rests pointing up (+Y); rotate it toward the cursor's direction.
-    const targetRoll = ROLL_DIR * (Math.atan2(pointer.aimY, pointer.aimX) - Math.PI / 2)
+    // Pitch about world X (the outer group) tips the head over toward / away
+    // from the camera — cursor below center leans him forward into a handstand.
+    // Yaw about Y (inner group) turns him to follow the cursor side to side.
+    const pitch = clampPi(-pointer.aimY * PITCH_GAIN * PITCH_DIR)
+    const yaw = MODEL_BASE_YAW + clampPi(pointer.aimX * YAW_GAIN * YAW_DIR)
 
-    groupRef.current.rotation.z = lerpAngle(groupRef.current.rotation.z, targetRoll, 0.12)
-    groupRef.current.position.y = -0.08 + Math.sin(elapsed * 1.25) * 0.055
+    pitchRef.current.rotation.x = lerpAngle(pitchRef.current.rotation.x, pitch, 0.1)
+    yawRef.current.rotation.y = lerpAngle(yawRef.current.rotation.y, yaw, 0.1)
+    pitchRef.current.position.y = -0.08 + Math.sin(elapsed * 1.25) * 0.055
   })
 
   return (
-    <group ref={groupRef}>
-      {/* Inner group faces the model toward the camera; the outer group rolls
-          it in the screen plane to point the head at the cursor. */}
-      <group rotation={[0, MODEL_BASE_YAW, 0]} scale={0.66}>
+    <group ref={pitchRef}>
+      {/* Outer group = world-space pitch (lean forward/back); inner group = yaw
+          (turn) plus the base orientation that faces him at the camera. */}
+      <group ref={yawRef} rotation={[0, MODEL_BASE_YAW, 0]} scale={0.66}>
         <primitive object={model} />
       </group>
     </group>
@@ -108,7 +118,7 @@ function PookieModelFallback() {
 }
 
 export default function GalleryPookieModel() {
-  const [pointer, setPointer] = useState<PointerTarget>({ aimX: 0, aimY: 1 })
+  const [pointer, setPointer] = useState<PointerTarget>({ aimX: 0, aimY: 0 })
   const [isLoaded, setIsLoaded] = useState(false)
   const [inView, setInView] = useState(true)
   const wrapRef = useRef<HTMLDivElement | null>(null)
@@ -123,9 +133,6 @@ export default function GalleryPookieModel() {
 
       const aimX = (event.clientX - (rect.left + rect.width / 2)) / (rect.width / 2)
       const aimY = (rect.top + rect.height / 2 - event.clientY) / (rect.height / 2)
-
-      // Ignore the dead zone right at the pivot where direction is undefined.
-      if (Math.hypot(aimX, aimY) < 0.04) return
 
       setPointer({ aimX, aimY })
     }
